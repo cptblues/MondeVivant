@@ -146,7 +146,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .soil-card span { color:var(--muted); font-size:9px; line-height:1.45; }
 .condition-row { display:grid; grid-template-columns:58px 1fr 28px; gap:7px; align-items:center; margin-top:8px; font-size:8px; }
 #waterBar { background:#68a9b7; } #shadeBar { background:#789c68; } #humusBar { background:#a9864c; }
-.nursery-panel { margin-top:13px; padding-top:12px; border-top:1px solid var(--line); }
+.nursery-panel,.robot-house-panel { margin-top:13px; padding-top:12px; border-top:1px solid var(--line); }
 .nursery-tabs { display:grid; grid-template-columns:1fr 1fr; padding:4px; border-radius:12px; background:#eee9dc; }
 .nursery-tabs button { height:32px; border:0; border-radius:9px; background:transparent; cursor:pointer; font-size:9px; font-weight:700; }
 .nursery-tabs button.is-active { background:white; color:#2f704a; box-shadow:0 3px 10px rgba(59,48,28,.08); }
@@ -184,6 +184,28 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px s
 .zone-row button { min-height:26px; padding:0 7px; border:0; border-radius:8px; background:#e1eadc; color:#315f42; cursor:pointer; font-size:8px; font-weight:800; }
 .zone-row button[data-zone-clear] { background:#ece6d9; color:#715d38; }
 .zone-empty { padding:9px; border-radius:10px; background:#f2eee2; color:var(--muted); font-size:9px; line-height:1.4; }
+.robot-house-resources { display:grid; gap:9px; }
+.seed-transfer-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.seed-transfer-button { min-height:54px; display:grid; justify-items:center; gap:2px; padding:7px 4px; border:0; border-radius:10px; background:#f2eee2; cursor:pointer; }
+.seed-transfer-button:disabled { opacity:.45; cursor:default; }
+.seed-transfer-button span { font-size:17px; line-height:1; }
+.seed-transfer-button strong { font-size:11px; }
+.seed-transfer-button small { color:var(--muted); font-size:7px; }
+.parcel-state { display:grid; gap:3px; margin-top:10px; padding:10px; border-radius:11px; background:#edf3e7; border-left:3px solid #39745e; }
+.parcel-state[data-state="waiting_resources"] { background:#f7eee2; border-left-color:#a65d2e; }
+.parcel-state[data-state="scanning"] { background:#e8f1f4; border-left-color:#357091; }
+.parcel-state[data-state="preparing"] { background:#f2eedf; border-left-color:#806f36; }
+.parcel-state[data-state="autonomous"] { background:#e2f1e8; border-left-color:#1d6346; }
+.parcel-state strong { font-size:11px; }
+.parcel-state small { color:var(--muted); font-size:8px; }
+.parcel-progress-list { display:grid; gap:8px; margin-top:10px; }
+.parcel-progress-row { display:grid; gap:4px; padding:8px; border-radius:10px; background:#f2eee2; }
+.parcel-progress-row > div { display:flex; justify-content:space-between; gap:8px; font-size:9px; }
+.parcel-progress-row strong { font-size:9px; }
+.parcel-progress-row small { color:var(--muted); font-size:8px; line-height:1.35; }
+.parcel-message { margin-top:8px; padding:9px; border-radius:10px; background:#f8eee5; }
+.parcel-message strong { display:block; font-size:10px; }
+.parcel-message ul { margin:5px 0 0; padding-left:15px; color:#755446; font-size:9px; line-height:1.35; }
 .inspector-actions { display:grid; gap:7px; margin-top:12px; }
 .inspector-actions button { padding:10px; border:0; border-radius:11px; background:#e8e1d2; color:#6b5830; cursor:pointer; font-size:9px; font-weight:800; }
 .inspector-actions button:disabled { opacity:.45; cursor:default; }

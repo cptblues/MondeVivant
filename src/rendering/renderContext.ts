@@ -32,6 +32,7 @@ export interface RendererContext {
   drawMoss(x: number, y: number, progress: number): void;
   drawScanZones(simulation: GameSimulation): void;
   drawPlantingZones(simulation: GameSimulation): void;
+  drawRestorationParcels(simulation: GameSimulation): void;
   drawPlantingQueueBadge(px: number, py: number, ready: boolean): void;
   drawGrassTile(x: number, y: number, progress: number): void;
   drawTrees(simulation: GameSimulation): void;
@@ -47,6 +48,7 @@ export interface RendererContext {
   drawBuildingWaterGauge(fill: number): void;
   drawPipeConnectorDot(): void;
   drawNurseryWorker(simulation: GameSimulation): void;
+  drawRobotHouseWorkers(simulation: GameSimulation): void;
   drawRobot(px: number, py: number, accent: string, blocked: boolean, progress: number | null, carryingWater: boolean): void;
   drawPlacementPreview(simulation: GameSimulation, hover: HoverState): void;
   drawEcologyOverlay(simulation: GameSimulation): void;

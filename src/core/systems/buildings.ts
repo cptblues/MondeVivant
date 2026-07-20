@@ -6,8 +6,10 @@ import {
   HARVEST_SEED_REWARD,
   NURSERY_CAPACITY,
   PUMP_LOCAL_IRRIGATION_CONSUMPTION,
+  ROBOT_HOUSE_CAPACITY,
   WOOD_PER_MATURE_TREE,
 } from '../gameConfig';
+import { createEmptySeedInventory } from '../state';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { BuildingInstance, BuildingType, BuildingWaterStatus, PlacementResult } from '../types';
 import type { SimulationContext } from '../simulationContext';
@@ -45,10 +47,38 @@ export function placeBuilding(this: SimulationContext, type: BuildingType, gx: n
   if (type === 'pump') {
     this.addLog('L’outil <b>Tuyau</b> est maintenant disponible dans le dock.');
     this.unlockBuilding('nursery', 'La <b>pépinière</b> est disponible : son robot peut scanner les sols et planter les graines.');
+    this.unlockBuilding('robot-house', 'La <b>maison de robot</b> est disponible : elle restaurera une parcelle rectangulaire avec ses propres ressources.');
   }
   if (type === 'nursery') {
     this.ensureNurseryWorker(building);
     this.addLog('Un <b>robot pépiniériste</b> rejoint la pépinière. Délimitez des scans ou peignez des zones de plantation.');
+  }
+  if (type === 'robot-house') {
+    this.ensureRobotHouseWorker(building);
+    if (!this.getRestorationParcelForHouse(building.id)) {
+      this.restorationParcels.push({
+        id: `parcel:${building.id}`,
+        homeBuildingId: building.id,
+        bounds: null,
+        state: 'unassigned',
+        totalTiles: 0,
+        analyzedTiles: 0,
+        preparedTiles: 0,
+        plantableTiles: 0,
+        plantedCount: 0,
+        vegetationCoverage: 0,
+        speciesPresent: 0,
+        healthyPlantRatio: 0,
+        developedTrees: 0,
+        needs: ['Définir une parcelle rectangulaire.'],
+        blockers: [],
+        progress: { analysis: 0, preparation: 0, planting: 0, maintenance: 0, biodiversity: 0, autonomy: 0 },
+        autonomousSince: null,
+        updatedAt: this.simulationTime,
+      });
+    }
+    this.selectedTool = { kind: 'restoration-parcel', homeBuildingId: building.id, start: null };
+    this.addLog('Un <b>robot restaurateur</b> rejoint sa maison. Dessinez maintenant sa parcelle rectangulaire.');
   }
   if (type === 'cistern') {
     this.completedTutorialSteps.add('build-cistern');
@@ -113,6 +143,13 @@ export function removeSelectedBuilding(this: SimulationContext): boolean {
     if (this.selectedTool?.kind === 'planting-zone') this.selectedTool = null;
     this.addLog('Les zones de plantation restent dessinées mais attendront une nouvelle pépinière.');
   }
+  if (building.type === 'robot-house') {
+    this.robotHouseWorkers = this.robotHouseWorkers.filter((worker) => worker.homeBuildingId !== building.id);
+    this.restorationParcels = this.restorationParcels.filter((parcel) => parcel.homeBuildingId !== building.id);
+    for (const task of this.tasks.filter((candidate) => candidate.homeBuildingId === building.id)) this.cancelTask(task.id, 'Maison de robot retirée');
+    if (this.selectedTool?.kind === 'restoration-parcel' && this.selectedTool.homeBuildingId === building.id) this.selectedTool = null;
+    this.addLog('La parcelle de restauration liée à cette maison a été retirée.');
+  }
   this.buildings = this.buildings.filter((candidate) => candidate.id !== building.id);
   this.addLog(`<b>${BUILDINGS[building.type].name}</b> récupérée et remise dans l’inventaire.`);
   this.toast('Construction récupérée');
@@ -130,6 +167,7 @@ export function makeBuilding(this: SimulationContext, type: BuildingType, gx: nu
     gy,
     placedAt: this.simulationTime,
     waterStored: 0,
+    seedInventory: type === 'robot-house' ? createEmptySeedInventory() : undefined,
   };
 }
 
@@ -179,6 +217,17 @@ export function getBuildingWaterStatus(this: SimulationContext, building: Buildi
       detail: hasPipe ? 'Alimentée si le tuyau a de la pression.' : 'À relier par tuyau ou à ravitailler par robot.',
     };
   }
+  if (building.type === 'robot-house') {
+    const fill = clamp(building.waterStored / ROBOT_HOUSE_CAPACITY, 0, 1);
+    const hasPipe = Boolean(this.getPipeCell(building.gx, building.gy));
+    return {
+      current: building.waterStored,
+      capacity: ROBOT_HOUSE_CAPACITY,
+      fill,
+      label: 'Réserve de la maison',
+      detail: hasPipe ? 'Alimentée selon la pression réelle du réseau.' : 'À remplir depuis la réserve ou avec un tuyau direct.',
+    };
+  }
   return null;
 }
 
@@ -194,6 +243,12 @@ export function getBuildingStatus(this: SimulationContext, building: BuildingIns
     const fill = Math.floor(building.waterStored);
     const sourceLabel = building.waterStored >= CISTERN_SOURCE_MIN_WATER ? 'source disponible' : `source à ${CISTERN_SOURCE_MIN_WATER} 💧`;
     return `${fill}/${CISTERN_CAPACITY} 💧 stockés · ${sourceLabel} · ${pipeCount} cases secondaires`;
+  }
+  if (building.type === 'robot-house') {
+    const parcel = this.getRestorationParcelForHouse(building.id);
+    if (!parcel || !parcel.bounds) return 'Robot prêt — définissez une parcelle rectangulaire';
+    const blocker = parcel.blockers[0] ?? parcel.needs[0];
+    return blocker ? `${parcel.state} · ${blocker}` : `${parcel.state} · parcelle en restauration`;
   }
   return 'Infrastructure active';
 }
@@ -241,6 +296,10 @@ export function getNurseryBuilding(this: SimulationContext): BuildingInstance | 
   return this.buildings.find((building) => building.type === 'nursery') ?? null;
 }
 
+export function getRobotHouseBuilding(this: SimulationContext, homeBuildingId?: number): BuildingInstance | null {
+  return this.buildings.find((building) => building.type === 'robot-house' && (homeBuildingId === undefined || building.id === homeBuildingId)) ?? null;
+}
+
 export function getPumpBuilding(this: SimulationContext): BuildingInstance | null {
   return this.buildings.find((building) => building.type === 'pump') ?? null;
 }
@@ -269,6 +328,7 @@ export const buildingsMethods = {
   hasNursery,
   formatBuildingCost,
   getNurseryBuilding,
+  getRobotHouseBuilding,
   getPumpBuilding,
   workerHome,
 };

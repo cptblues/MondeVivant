@@ -12,6 +12,8 @@ import type {
   PipeSource,
   PlantingZone,
   PlacementTool,
+  RestorationParcel,
+  RobotWorker,
   RobotTask,
   ScanZone,
   SeedType,
@@ -38,6 +40,8 @@ export class GameSimulation {
   public scanZones: ScanZone[] = [];
   public tasks: RobotTask[] = [];
   public nurseryWorker: NurseryWorker | null = null;
+  public robotHouseWorkers: RobotWorker[] = [];
+  public restorationParcels: RestorationParcel[] = [];
   public logs: string[] = [];
 
   public nextBuildingId = 1;

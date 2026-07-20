@@ -9,6 +9,8 @@ import {
   PUMP_WATER_RATE,
   RESEARCH_COST,
   RESEARCH_DURATION,
+  RESTORATION_AUTONOMY,
+  ROBOT_HOUSE_WATER_PER_TASK,
   ROBOT_TASK_PRIORITIES,
   SIMULATION_STEP,
 } from './gameConfig';
@@ -33,6 +35,15 @@ function preparePumpAndNursery(): GameSimulation {
   return simulation;
 }
 
+function preparePumpAndRobotHouse(): { simulation: GameSimulation; houseId: number } {
+  const simulation = new GameSimulation();
+  placeBuilding(simulation, 'pump', 15, 25);
+  placeBuilding(simulation, 'robot-house', 20, 25);
+  const house = simulation.getRobotHouseBuilding();
+  expect(house).toBeTruthy();
+  return { simulation, houseId: house!.id };
+}
+
 function pipe(gx: number, gy: number, distance: number, sourceId: number): PipeCell {
   return { gx, gy, distance, sourceType: 'pump', sourceId, outlet: false, outletOpen: false, pressureLevel: 'none' };
 }
@@ -48,7 +59,7 @@ describe('simulation progression', () => {
     expect(simulation.getUnlockedBuildingTypes()).toEqual(['pump']);
 
     placeBuilding(simulation, 'pump', 15, 25);
-    expect(simulation.getUnlockedBuildingTypes()).toEqual(['pump', 'nursery']);
+    expect(simulation.getUnlockedBuildingTypes()).toEqual(['pump', 'nursery', 'robot-house']);
 
     const treeIndex = simulation.index(28, 25);
     const cell = simulation.cells[treeIndex];
@@ -58,7 +69,7 @@ describe('simulation progression', () => {
     simulation.selectCell(treeIndex);
 
     expect(simulation.harvestSelectedTreeForWood()).toBe(true);
-    expect(simulation.getUnlockedBuildingTypes()).toEqual(['pump', 'nursery', 'cistern']);
+    expect(simulation.getUnlockedBuildingTypes()).toEqual(['pump', 'nursery', 'robot-house', 'cistern']);
     expect(simulation.seedInventory.pioneer).toBe(4);
   });
 
@@ -197,6 +208,123 @@ describe('robot tasks', () => {
 
     expect(cistern.waterStored).toBeGreaterThan(0);
     expect(simulation.tasks.some((candidate) => candidate.id === task?.id)).toBe(true);
+  });
+});
+
+describe('robot house restoration', () => {
+  it('places a robot house, attaches a robot, assigns a rectangle and creates scan tasks', () => {
+    const { simulation, houseId } = preparePumpAndRobotHouse();
+    expect(simulation.robotHouseWorkers.find((worker) => worker.homeBuildingId === houseId)?.role).toBe('restoration');
+    expect(simulation.selectedTool?.kind).toBe('restoration-parcel');
+
+    expect(simulation.placeSelected(21, 24).ok).toBe(true);
+    expect(simulation.placeSelected(23, 26).ok).toBe(true);
+
+    const parcel = simulation.getRestorationParcelForHouse(houseId);
+    expect(parcel?.bounds).toEqual({ minX: 21, minY: 24, maxX: 23, maxY: 26 });
+    const house = simulation.getRobotHouseBuilding(houseId)!;
+    const unknownTiles = simulation.getRestorationParcelCells(parcel!)
+      .filter((index) => index !== simulation.index(house.gx, house.gy))
+      .filter((index) => !simulation.cells[index].known);
+    const scanTasks = simulation.tasks.filter((task) => task.homeBuildingId === houseId && task.type === 'scan' && task.state === 'available');
+    expect(scanTasks).toHaveLength(unknownTiles.length);
+  });
+
+  it('reports missing compatible seeds after the parcel is analyzed', () => {
+    const { simulation, houseId } = preparePumpAndRobotHouse();
+    expect(simulation.assignRestorationParcel(houseId, { minX: 21, minY: 25, maxX: 22, maxY: 25 }).ok).toBe(true);
+    const parcel = simulation.getRestorationParcelForHouse(houseId)!;
+    for (const index of simulation.getRestorationParcelCells(parcel)) {
+      const cell = simulation.cells[index];
+      cell.known = true;
+      cell.revealed = true;
+      cell.terrain = TerrainType.Sand;
+      cell.water = 20;
+    }
+
+    simulation.updateRestorationParcels(0);
+
+    expect(parcel.state).toBe('waiting_resources');
+    expect(parcel.blockers).toContain('Aucune graine compatible dans la maison.');
+  });
+
+  it('prepares and plants through local house inventory', () => {
+    const { simulation, houseId } = preparePumpAndRobotHouse();
+    const target = simulation.index(21, 25);
+    expect(simulation.assignRestorationParcel(houseId, { minX: 21, minY: 25, maxX: 21, maxY: 25 }).ok).toBe(true);
+    const cell = simulation.cells[target];
+    cell.known = true;
+    cell.revealed = true;
+    cell.terrain = TerrainType.Sand;
+    cell.water = 22;
+    cell.humus = 6;
+    expect(simulation.transferSeedToRobotHouse(houseId, 'pioneer').ok).toBe(true);
+
+    advance(simulation, 5);
+
+    const house = simulation.getRobotHouseBuilding(houseId)!;
+    expect(cell.preparedByRobotHouseId).toBe(houseId);
+    expect(cell.tree).toBe('pioneer');
+    expect(house.seedInventory?.pioneer).toBe(0);
+    expect(simulation.seedInventory.pioneer).toBe(2);
+  });
+
+  it('waters from the house reservoir and consumes local water', () => {
+    const { simulation, houseId } = preparePumpAndRobotHouse();
+    const target = simulation.index(21, 25);
+    expect(simulation.assignRestorationParcel(houseId, { minX: 21, minY: 25, maxX: 21, maxY: 25 }).ok).toBe(true);
+    const cell = simulation.cells[target];
+    cell.known = true;
+    cell.revealed = true;
+    cell.terrain = TerrainType.Sand;
+    cell.tree = 'pioneer';
+    cell.treeStage = 1;
+    cell.treeOrigin = 'player';
+    cell.cover = 2;
+    cell.humus = 10;
+    cell.water = 2;
+    const house = simulation.getRobotHouseBuilding(houseId)!;
+    house.waterStored = ROBOT_HOUSE_WATER_PER_TASK;
+    simulation.syncRobotTasks();
+
+    const task = simulation.tasks.find((candidate) => candidate.homeBuildingId === houseId && candidate.type === 'water_plant');
+    expect(task?.state).toBe('available');
+
+    advance(simulation, 4);
+
+    expect(house.waterStored).toBeCloseTo(0);
+    expect(cell.water).toBeGreaterThan(2);
+    expect(simulation.getRobotTask(task?.id)?.state).toBe('completed');
+  });
+
+  it('marks a stable parcel autonomous and stops normal maintenance tasks', () => {
+    const { simulation, houseId } = preparePumpAndRobotHouse();
+    expect(simulation.assignRestorationParcel(houseId, { minX: 21, minY: 25, maxX: 22, maxY: 26 }).ok).toBe(true);
+    const parcel = simulation.getRestorationParcelForHouse(houseId)!;
+    for (const index of simulation.getRestorationParcelCells(parcel)) {
+      const cell = simulation.cells[index];
+      cell.known = true;
+      cell.revealed = true;
+      cell.terrain = TerrainType.Sand;
+      cell.preparedByRobotHouseId = houseId;
+      cell.cover = 2;
+      cell.humus = 12;
+      cell.water = 40;
+      cell.tree = 'pioneer';
+      cell.treeStage = 2;
+      cell.treeStress = 0;
+      cell.treeOrigin = 'player';
+    }
+
+    simulation.updateRestorationParcels(0);
+    simulation.simulationTime += RESTORATION_AUTONOMY.requiredContinuousDuration + 0.1;
+    simulation.updateRestorationParcels(0);
+    simulation.syncRobotTasks();
+    simulation.updateRobotHouseWorkers(0.1);
+
+    expect(parcel.state).toBe('autonomous');
+    expect(simulation.tasks.filter((task) => task.homeBuildingId === houseId && ['plant', 'water_plant', 'prepare_soil'].includes(task.type) && ['available', 'reserved', 'in-progress'].includes(task.state))).toHaveLength(0);
+    expect(simulation.robotHouseWorkers.find((worker) => worker.homeBuildingId === houseId)?.message).toContain('autonome');
   });
 });
 

@@ -1,4 +1,4 @@
-import { CISTERN_CAPACITY, NURSERY_CAPACITY } from '../gameConfig';
+import { CISTERN_CAPACITY, NURSERY_CAPACITY, ROBOT_HOUSE_CAPACITY } from '../gameConfig';
 import { GRID_WIDTH, TerrainType } from '../types';
 import type { BuildingInstance, Cell, GameMetrics, PipeCell } from '../types';
 import type { SimulationContext } from '../simulationContext';
@@ -71,6 +71,14 @@ export function getNurseryCapacityTotal(this: SimulationContext): number {
   return this.buildings.filter((building) => building.type === 'nursery').length * NURSERY_CAPACITY;
 }
 
+export function getRobotHouseWaterStored(this: SimulationContext): number {
+  return this.buildings.reduce((sum, building) => sum + (building.type === 'robot-house' ? building.waterStored : 0), 0);
+}
+
+export function getRobotHouseCapacityTotal(this: SimulationContext): number {
+  return this.buildings.filter((building) => building.type === 'robot-house').length * ROBOT_HOUSE_CAPACITY;
+}
+
 export const queriesMethods = {
   getSelectedBuilding,
   getSelectedPipe,
@@ -80,4 +88,6 @@ export const queriesMethods = {
   getCisternCapacityTotal,
   getNurseryWaterStored,
   getNurseryCapacityTotal,
+  getRobotHouseWaterStored,
+  getRobotHouseCapacityTotal,
 };

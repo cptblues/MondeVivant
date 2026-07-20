@@ -5,6 +5,7 @@ import { pipeNetworkMethods } from './pipeNetwork';
 import { pipesMethods } from './pipes';
 import { progressionMethods } from './progression';
 import { queriesMethods } from './queries';
+import { restorationMethods } from './restoration';
 import { runtimeMethods } from './runtime';
 import { tasksMethods } from './tasks';
 import { workerTargetMethods } from './workerTargets';
@@ -16,6 +17,7 @@ export const installSimulationSystems = (prototype: object): void => {
     runtimeMethods,
     buildingsMethods,
     nurseryMethods,
+    restorationMethods,
     tasksMethods,
     workersMethods,
     workerTargetMethods,

@@ -1,7 +1,19 @@
 import { SEEDS } from '../config';
-import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_CAPACITY, NURSERY_WORKER_CAPACITY, SEED_SEARCH_DURATION, WORKER_PLANT_DURATION, WORKER_TRANSFER_DURATION } from '../gameConfig';
-import { GRID_WIDTH } from '../types';
-import type { BuildingInstance, NurseryWorker, RobotTask } from '../types';
+import {
+  CISTERN_CAPACITY,
+  CISTERN_SOURCE_MIN_WATER,
+  NURSERY_CAPACITY,
+  NURSERY_WORKER_CAPACITY,
+  ROBOT_HOUSE_PLANT_DURATION,
+  ROBOT_HOUSE_PREPARE_DURATION,
+  ROBOT_HOUSE_SCAN_TILE_DURATION,
+  ROBOT_HOUSE_WATER_DURATION,
+  SEED_SEARCH_DURATION,
+  WORKER_PLANT_DURATION,
+  WORKER_TRANSFER_DURATION,
+} from '../gameConfig';
+import { GRID_WIDTH, TerrainType } from '../types';
+import type { BuildingInstance, NurseryWorker, RobotTask, RobotWorker } from '../types';
 import type { SimulationContext } from '../simulationContext';
 
 function getNurseryWaterDeliveryTarget(simulation: SimulationContext, worker: NurseryWorker): BuildingInstance | null {
@@ -417,6 +429,242 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 }
 
+function restorationIdleMessage(simulation: SimulationContext, house: BuildingInstance): { message: string; blocked: boolean } {
+  const parcel = simulation.getRestorationParcelForHouse(house.id);
+  if (!parcel || !parcel.bounds) return { message: 'Parcelle à dessiner pour ce robot', blocked: true };
+  if (parcel.state === 'autonomous') return { message: 'Parcelle autonome, robot disponible', blocked: false };
+  const blocker = parcel.blockers[0];
+  if (blocker) return { message: blocker, blocked: true };
+  const need = parcel.needs[0];
+  if (need) return { message: need, blocked: false };
+  return { message: 'Surveille la parcelle', blocked: false };
+}
+
+function assignRestorationTask(simulation: SimulationContext, worker: RobotWorker, task: RobotTask): boolean {
+  const reserved = simulation.reserveTask(task.id, worker.id);
+  if (!reserved || reserved.target.kind !== 'cell' || reserved.homeBuildingId === undefined) return false;
+  worker.currentTaskId = reserved.id;
+  clearWorkerTargets(worker);
+  worker.targetIndex = reserved.target.index;
+  worker.targetBuildingId = reserved.homeBuildingId;
+  worker.targetSeed = reserved.seed ?? null;
+  worker.waterLoad = 0;
+  worker.progress = 0;
+  worker.state = 'to-target';
+  if (reserved.type === 'scan') worker.message = 'Va analyser une tuile de parcelle';
+  else if (reserved.type === 'prepare_soil') worker.message = 'Va préparer un emplacement';
+  else if (reserved.type === 'water_plant') worker.message = 'Va arroser la parcelle';
+  else if (reserved.type === 'plant') worker.message = reserved.seed ? `Va planter ${SEEDS[reserved.seed].name}` : 'Va planter une graine compatible';
+  else worker.message = 'Va traiter une tâche de parcelle';
+  return true;
+}
+
+function setRobotHouseWorkerBlocked(simulation: SimulationContext, worker: RobotWorker, message: string): void {
+  if (worker.currentTaskId) simulation.blockTask(worker.currentTaskId, message);
+  worker.state = 'blocked';
+  worker.currentTaskId = null;
+  clearWorkerTargets(worker);
+  worker.waterLoad = 0;
+  worker.progress = 0;
+  worker.message = message;
+  simulation.notify();
+}
+
+function updateRobotHouseWorker(simulation: SimulationContext, house: BuildingInstance, worker: RobotWorker, dt: number): void {
+  const home = simulation.workerHome(house);
+  const parcel = simulation.getRestorationParcelForHouse(house.id);
+  if (parcel?.state === 'autonomous' && worker.currentTaskId) {
+    simulation.cancelTask(worker.currentTaskId, 'Parcelle autonome');
+    worker.currentTaskId = null;
+    clearWorkerTargets(worker);
+    worker.state = 'returning';
+    worker.message = 'Retour maison, parcelle autonome';
+    simulation.notify();
+    return;
+  }
+
+  if (worker.state === 'idle' || worker.state === 'blocked') {
+    if (worker.state === 'blocked') {
+      worker.progress += dt;
+      if (worker.progress < 1.5) return;
+    }
+    worker.state = 'idle';
+    worker.progress = 0;
+    const task = simulation.selectNextTask(worker);
+    if (task && assignRestorationTask(simulation, worker, task)) {
+      simulation.notify();
+      return;
+    }
+    const idle = restorationIdleMessage(simulation, house);
+    const nextState = idle.blocked ? 'blocked' : 'idle';
+    if (worker.state !== nextState || worker.message !== idle.message) {
+      worker.state = nextState;
+      worker.currentTaskId = null;
+      clearWorkerTargets(worker);
+      worker.message = idle.message;
+      simulation.notify();
+    }
+    return;
+  }
+
+  if (worker.state === 'to-target') {
+    const task = simulation.getRobotTask(worker.currentTaskId);
+    if (!task || task.homeBuildingId !== house.id || task.target.kind !== 'cell' || task.state === 'cancelled' || task.state === 'blocked' || worker.targetIndex === null) {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = task?.blockedReason ?? 'Tâche de parcelle modifiée';
+      simulation.notify();
+      return;
+    }
+    const targetX = (worker.targetIndex % GRID_WIDTH) + 0.5;
+    const targetY = Math.floor(worker.targetIndex / GRID_WIDTH) + 0.5;
+    if (simulation.moveWorkerToward(worker, targetX, targetY, dt)) {
+      if (!simulation.startTask(task.id, worker.id)) {
+        setRobotHouseWorkerBlocked(simulation, worker, simulation.getRobotTask(task.id)?.blockedReason ?? 'Tâche de parcelle impossible');
+        return;
+      }
+      worker.progress = 0;
+      if (task.type === 'scan') {
+        worker.state = 'scanning';
+        worker.message = 'Analyse une tuile';
+      } else if (task.type === 'prepare_soil') {
+        worker.state = 'preparing';
+        worker.message = 'Prépare le sol';
+      } else if (task.type === 'water_plant') {
+        worker.state = 'watering';
+        worker.message = 'Arrose depuis la réserve locale';
+      } else if (task.type === 'plant') {
+        worker.state = 'planting';
+        worker.targetSeed = task.seed ?? null;
+        worker.message = task.seed ? `Plante ${SEEDS[task.seed].name}` : 'Plante une graine compatible';
+      } else {
+        setRobotHouseWorkerBlocked(simulation, worker, 'Type de tâche non pris en charge par la maison');
+        return;
+      }
+      simulation.notify();
+    }
+    return;
+  }
+
+  if (worker.state === 'scanning') {
+    const task = simulation.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'scan' || task.target.kind !== 'cell' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.message = 'Scan de parcelle modifié';
+      simulation.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / ROBOT_HOUSE_SCAN_TILE_DURATION);
+    if (worker.progress < 1) return;
+    const cell = simulation.cells[task.target.index];
+    if (cell && cell.terrain !== TerrainType.Rock) {
+      cell.known = true;
+      cell.revealed = true;
+      simulation.discoveredSoils.add(cell.terrain);
+    }
+    simulation.completeTask(task.id);
+    worker.currentTaskId = null;
+    worker.state = 'idle';
+    worker.progress = 0;
+    worker.message = 'Tuile analysée';
+    simulation.updateRestorationParcels(0);
+    simulation.notify();
+    return;
+  }
+
+  if (worker.state === 'preparing') {
+    const task = simulation.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'prepare_soil' || task.target.kind !== 'cell' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.message = 'Préparation modifiée';
+      simulation.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / ROBOT_HOUSE_PREPARE_DURATION);
+    if (worker.progress < 1) return;
+    const result = simulation.prepareSoilAt(house.id, task.target.index);
+    if (result.ok) simulation.completeTask(task.id);
+    else simulation.blockTask(task.id, result.message);
+    worker.currentTaskId = null;
+    worker.state = 'idle';
+    worker.progress = 0;
+    worker.message = result.ok ? 'Sol préparé' : result.message;
+    simulation.updateRestorationParcels(0);
+    simulation.notify();
+    return;
+  }
+
+  if (worker.state === 'watering') {
+    const task = simulation.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'water_plant' || task.target.kind !== 'cell' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.message = 'Arrosage modifié';
+      simulation.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / ROBOT_HOUSE_WATER_DURATION);
+    if (worker.progress < 1) return;
+    const result = simulation.waterPlantFromRobotHouse(house.id, task.target.index);
+    if (result.ok) simulation.completeTask(task.id);
+    else simulation.blockTask(task.id, result.message);
+    worker.currentTaskId = null;
+    worker.state = 'idle';
+    worker.progress = 0;
+    worker.message = result.ok ? 'Arrosage terminé' : result.message;
+    simulation.updateRestorationParcels(0);
+    simulation.notify();
+    return;
+  }
+
+  if (worker.state === 'planting') {
+    const task = simulation.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'plant' || task.target.kind !== 'cell' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.message = 'Plantation modifiée';
+      simulation.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / ROBOT_HOUSE_PLANT_DURATION);
+    if (worker.progress < 1) return;
+    const parcelForSeed = simulation.getRestorationParcelForHouse(house.id);
+    const seed = task.seed ?? (parcelForSeed ? simulation.chooseRestorationSeedForIndex(parcelForSeed, task.target.index) : null);
+    const result = seed
+      ? simulation.plantSeedFromRobotHouse(house.id, seed, task.target.gx, task.target.gy)
+      : { ok: false, message: 'Aucune graine compatible dans la maison' };
+    if (result.ok) simulation.completeTask(task.id);
+    else simulation.blockTask(task.id, result.message);
+    worker.currentTaskId = null;
+    worker.targetSeed = null;
+    worker.state = 'idle';
+    worker.progress = 0;
+    worker.message = result.ok ? 'Plantation terminée' : result.message;
+    simulation.updateRestorationParcels(0);
+    simulation.notify();
+    return;
+  }
+
+  if (worker.state === 'returning') {
+    if (simulation.moveWorkerToward(worker, home.x, home.y, dt)) {
+      worker.state = 'idle';
+      worker.currentTaskId = null;
+      clearWorkerTargets(worker);
+      worker.progress = 0;
+      worker.message = parcel?.state === 'autonomous' ? 'Parcelle autonome, robot disponible' : 'Prêt pour la parcelle';
+      simulation.notify();
+    }
+  }
+}
+
+export function updateRobotHouseWorkers(this: SimulationContext, dt: number): void {
+  const houses = this.buildings.filter((building) => building.type === 'robot-house');
+  const houseIds = new Set(houses.map((house) => house.id));
+  this.robotHouseWorkers = this.robotHouseWorkers.filter((worker) => worker.homeBuildingId !== null && houseIds.has(worker.homeBuildingId));
+  for (const house of houses) {
+    const worker = this.ensureRobotHouseWorker(house);
+    updateRobotHouseWorker(this, house, worker, dt);
+  }
+}
+
 export function ensureNurseryWorker(this: SimulationContext, nursery: BuildingInstance): NurseryWorker {
   if (!this.nurseryWorker) {
     const home = this.workerHome(nursery);
@@ -426,6 +674,7 @@ export function ensureNurseryWorker(this: SimulationContext, nursery: BuildingIn
       state: 'idle',
       x: home.x,
       y: home.y,
+      homeBuildingId: nursery.id,
       currentTaskId: null,
       targetIndex: null,
       targetSeed: null,
@@ -437,6 +686,31 @@ export function ensureNurseryWorker(this: SimulationContext, nursery: BuildingIn
     };
   }
   return this.nurseryWorker;
+}
+
+export function ensureRobotHouseWorker(this: SimulationContext, house: BuildingInstance): RobotWorker {
+  let worker = this.robotHouseWorkers.find((candidate) => candidate.homeBuildingId === house.id);
+  if (!worker) {
+    const home = this.workerHome(house);
+    worker = {
+      id: `restoration-${house.id}`,
+      role: 'restoration',
+      state: 'idle',
+      x: home.x,
+      y: home.y,
+      homeBuildingId: house.id,
+      currentTaskId: null,
+      targetIndex: null,
+      targetSeed: null,
+      targetScanZoneId: null,
+      targetBuildingId: null,
+      waterLoad: 0,
+      progress: 0,
+      message: 'Définissez une parcelle rectangulaire',
+    };
+    this.robotHouseWorkers.push(worker);
+  }
+  return worker;
 }
 
 export function wakeNurseryWorker(this: SimulationContext): void {
@@ -468,6 +742,8 @@ export function setNurseryWorkerBlocked(this: SimulationContext, worker: Nursery
 export const workersMethods = {
   updateNurseryWorker,
   ensureNurseryWorker,
+  updateRobotHouseWorkers,
+  ensureRobotHouseWorker,
   wakeNurseryWorker,
   clearNurseryWorkerTask,
   setNurseryWorkerBlocked,

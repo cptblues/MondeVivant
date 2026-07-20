@@ -17,6 +17,8 @@ import {
   NURSERY_CAPACITY,
   NURSERY_COST,
   NURSERY_WORKER_CAPACITY,
+  ROBOT_HOUSE_CAPACITY,
+  ROBOT_HOUSE_COST,
   SCAN_ZONE_RADIUS,
   WORKER_SPEED_CELLS_PER_SECOND,
 } from './gameConfig';
@@ -45,7 +47,7 @@ export const TERRAIN_COLORS: Record<TerrainType, string> = {
   [TerrainType.Rock]: '#766f64',
 };
 
-export const BUILDING_ORDER: BuildingType[] = ['pump', 'nursery', 'cistern'];
+export const BUILDING_ORDER: BuildingType[] = ['pump', 'nursery', 'robot-house', 'cistern'];
 
 export const BUILDINGS: Record<BuildingType, BuildingDefinition> = {
   pump: {
@@ -74,6 +76,20 @@ export const BUILDINGS: Record<BuildingType, BuildingDefinition> = {
     storage: { resource: 'water', capacity: NURSERY_CAPACITY },
     worker: { role: 'nursery', capacity: NURSERY_WORKER_CAPACITY, speedCellsPerSecond: WORKER_SPEED_CELLS_PER_SECOND },
     placementRules: ['not-rock', 'not-salt', 'not-near-building', 'not-on-tree', 'not-on-pipe'],
+  },
+  'robot-house': {
+    id: 'robot-house',
+    name: 'Maison de robot',
+    icon: '🤖',
+    radiusCells: 0,
+    cost: ROBOT_HOUSE_COST,
+    capacity: ROBOT_HOUSE_CAPACITY,
+    description: 'Abrite un robot restaurateur, stocke eau et graines locales, puis restaure une parcelle rectangulaire définie par le joueur.',
+    unlock: 'Disponible après la pompe',
+    effects: {},
+    storage: { resource: 'water', capacity: ROBOT_HOUSE_CAPACITY },
+    worker: { role: 'restoration', capacity: 1, speedCellsPerSecond: WORKER_SPEED_CELLS_PER_SECOND },
+    placementRules: ['not-rock', 'not-near-building', 'not-on-tree', 'not-on-pipe'],
   },
   cistern: {
     id: 'cistern',

@@ -74,6 +74,55 @@ export function drawPlantingZones(this: RendererContext, simulation: GameSimulat
   ctx.restore();
 }
 
+function restorationPhaseColor(state: string): { fill: string; stroke: string; mark: string } {
+  if (state === 'scanning') return { fill: 'rgba(67, 132, 160, .13)', stroke: 'rgba(53, 112, 145, .72)', mark: '#357091' };
+  if (state === 'waiting_resources') return { fill: 'rgba(182, 112, 62, .12)', stroke: 'rgba(166, 93, 46, .74)', mark: '#a65d2e' };
+  if (state === 'preparing') return { fill: 'rgba(141, 125, 66, .13)', stroke: 'rgba(128, 111, 54, .72)', mark: '#806f36' };
+  if (state === 'planting') return { fill: 'rgba(70, 143, 82, .14)', stroke: 'rgba(47, 120, 72, .76)', mark: '#2f7848' };
+  if (state === 'autonomous') return { fill: 'rgba(51, 129, 94, .18)', stroke: 'rgba(29, 99, 70, .86)', mark: '#1d6346' };
+  return { fill: 'rgba(75, 118, 93, .1)', stroke: 'rgba(61, 101, 78, .62)', mark: '#3d654e' };
+}
+
+export function drawRestorationParcels(this: RendererContext, simulation: GameSimulation): void {
+  const ctx = this.context;
+  if (!simulation.restorationParcels.length) return;
+  ctx.save();
+  this.roundedRect(0, 0, WORLD_WIDTH, WORLD_HEIGHT, 34);
+  ctx.clip();
+  for (const parcel of simulation.restorationParcels) {
+    if (!parcel.bounds) continue;
+    const selected = simulation.selectedTarget?.kind === 'building' && simulation.selectedTarget.id === parcel.homeBuildingId;
+    const color = restorationPhaseColor(parcel.state);
+    for (const index of simulation.getRestorationParcelCells(parcel)) {
+      const x = index % GRID_WIDTH;
+      const y = Math.floor(index / GRID_WIDTH);
+      const px = x * CELL_SIZE;
+      const py = y * CELL_SIZE;
+      ctx.fillStyle = color.fill;
+      ctx.fillRect(px + 1, py + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+      if (simulation.cells[index]?.preparedByRobotHouseId === parcel.homeBuildingId) {
+        ctx.strokeStyle = 'rgba(255, 252, 238, .72)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(px + 5, py + 5, CELL_SIZE - 10, CELL_SIZE - 10);
+      }
+    }
+    const x = parcel.bounds.minX * CELL_SIZE;
+    const y = parcel.bounds.minY * CELL_SIZE;
+    const width = (parcel.bounds.maxX - parcel.bounds.minX + 1) * CELL_SIZE;
+    const height = (parcel.bounds.maxY - parcel.bounds.minY + 1) * CELL_SIZE;
+    ctx.strokeStyle = color.stroke;
+    ctx.lineWidth = selected ? 3 : 2;
+    ctx.setLineDash(selected ? [] : [7, 5]);
+    ctx.strokeRect(x + 1.5, y + 1.5, width - 3, height - 3);
+    ctx.setLineDash([]);
+    ctx.fillStyle = color.mark;
+    ctx.beginPath();
+    ctx.arc(x + width - 9, y + 9, selected ? 5.2 : 4.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 export function drawPlantingQueueBadge(this: RendererContext, px: number, py: number, ready: boolean): void {
   const ctx = this.context;
   ctx.save();
@@ -214,6 +263,23 @@ export function drawPlacementPreview(this: RendererContext, simulation: GameSimu
     ctx.restore();
     return;
   }
+  if (simulation.selectedTool.kind === 'restoration-parcel') {
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = validation.ok ? '#2f7951' : '#b84f43';
+    ctx.lineWidth = 2.5;
+    const indices = simulation.getRestorationParcelPreviewCells(cell.x, cell.y);
+    if (indices.length) this.drawActionCells(indices, validation.ok);
+    ctx.strokeRect(cell.x * CELL_SIZE + 2, cell.y * CELL_SIZE + 2, CELL_SIZE - 4, CELL_SIZE - 4);
+    ctx.fillStyle = validation.ok ? '#2f704a' : '#9b4d40';
+    ctx.font = '800 12px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(simulation.selectedTool.start ? '□' : '+', px, py);
+    ctx.restore();
+    return;
+  }
+  if (simulation.selectedTool.kind !== 'building') return;
   ctx.save();
   ctx.globalAlpha = 0.82;
   ctx.strokeStyle = validation.ok ? '#3b965b' : '#b84f43';
@@ -238,6 +304,7 @@ export function drawMapBorder(this: RendererContext): void {
 export const zonesRenderMethods = {
   drawScanZones,
   drawPlantingZones,
+  drawRestorationParcels,
   drawPlantingQueueBadge,
   drawPipeReach,
   drawActionCells,

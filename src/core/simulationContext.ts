@@ -18,7 +18,10 @@ import type {
   PlacementResult,
   PlacementTool,
   PressureLevel,
+  RestorationParcel,
+  RestorationParcelBounds,
   RobotRole,
+  RobotWorker,
   RobotTask,
   RobotTaskResources,
   RobotTaskState,
@@ -72,6 +75,8 @@ export interface SimulationContext {
   scanZones: ScanZone[];
   tasks: RobotTask[];
   nurseryWorker: NurseryWorker | null;
+  robotHouseWorkers: RobotWorker[];
+  restorationParcels: RestorationParcel[];
   logs: string[];
   readonly events: GameEvents;
   nextBuildingId: number;
@@ -99,6 +104,7 @@ export interface SimulationContext {
   validateSelected(gx: number, gy: number): PlacementResult;
   validateBuildingPlacement(type: BuildingType, gx: number, gy: number): PlacementResult;
   validateSeedPlacement(seed: SeedType, gx: number, gy: number): PlacementResult;
+  validateSeedPlacementForInventory(seed: SeedType, gx: number, gy: number, availableSeeds: number): PlacementResult;
   placeBuilding(type: BuildingType, gx: number, gy: number): PlacementResult;
   plantSeed(seed: SeedType, gx: number, gy: number): PlacementResult;
   harvestSelectedTreeForWood(): boolean;
@@ -128,6 +134,22 @@ export interface SimulationContext {
   getPlantingZoneAt(index: number): PlantingZone | null;
   togglePlantingZone(id: number): boolean;
   clearPlantingZone(id: number): boolean;
+  validateRestorationParcelClick(gx: number, gy: number): PlacementResult;
+  handleRestorationParcelClick(gx: number, gy: number): PlacementResult;
+  selectRestorationParcelTool(homeBuildingId: number): PlacementResult;
+  assignRestorationParcel(homeBuildingId: number, bounds: RestorationParcelBounds): PlacementResult;
+  getRestorationParcelForHouse(homeBuildingId: number): RestorationParcel | null;
+  getRestorationParcelCells(parcel: RestorationParcel): number[];
+  getRestorationParcelPreviewCells(gx: number, gy: number): number[];
+  updateRestorationParcels(dt: number): void;
+  syncRestorationTasks(desiredIds: Set<string>): void;
+  getRestorationTaskBlockedReason(task: RobotTask): string | null;
+  chooseRestorationSeedForIndex(parcel: RestorationParcel, index: number): SeedType | null;
+  transferSeedToRobotHouse(homeBuildingId: number, seed: SeedType): PlacementResult;
+  transferWaterToRobotHouse(homeBuildingId: number): PlacementResult;
+  prepareSoilAt(homeBuildingId: number, index: number): PlacementResult;
+  plantSeedFromRobotHouse(homeBuildingId: number, seed: SeedType, gx: number, gy: number): PlacementResult;
+  waterPlantFromRobotHouse(homeBuildingId: number, index: number): PlacementResult;
   getSelectedBuilding(): BuildingInstance | null;
   getSelectedPipe(): PipeCell | null;
   getSelectedCell(): { cell: Cell; index: number; x: number; y: number } | null;
@@ -177,6 +199,8 @@ export interface SimulationContext {
   pruneEmptyPlantingZones(): void;
   updateNurseryWorker(dt: number): void;
   ensureNurseryWorker(nursery: BuildingInstance): NurseryWorker;
+  updateRobotHouseWorkers(dt: number): void;
+  ensureRobotHouseWorker(house: BuildingInstance): RobotWorker;
   wakeNurseryWorker(): void;
   setNurseryWorkerBlocked(worker: NurseryWorker, message: string): void;
   clearNurseryWorkerTask(worker: NurseryWorker): void;
@@ -199,6 +223,8 @@ export interface SimulationContext {
     type: RobotTaskType;
     target: RobotTaskTarget;
     zoneId?: number;
+    parcelId?: string;
+    homeBuildingId?: number;
     seed?: SeedType;
     priority: number;
     requiredResources?: RobotTaskResources;
@@ -218,6 +244,7 @@ export interface SimulationContext {
   getTaskForScanZone(zoneId: number): RobotTask | null;
   getTasksForPlantingZone(zoneId: number): RobotTask[];
   getNurseryBuilding(): BuildingInstance | null;
+  getRobotHouseBuilding(homeBuildingId?: number): BuildingInstance | null;
   getPumpBuilding(): BuildingInstance | null;
   workerHome(building: BuildingInstance): { x: number; y: number };
   syncTutorialProgress(): void;
@@ -228,6 +255,7 @@ export interface SimulationContext {
   drainLocalIrrigation(dt: number): void;
   getCisternPipeFillRate(level: PressureLevel): number;
   getNurseryPipeFillRate(level: PressureLevel): number;
+  getRobotHousePipeFillRate(level: PressureLevel): number;
   consumeSourceWater(source: PipeSource | PipeCell, amount: number): void;
   computeFields(): FieldSet;
   getWaterProduction(): number;
@@ -254,6 +282,8 @@ export interface SimulationContext {
   getCisternCapacityTotal(): number;
   getNurseryWaterStored(): number;
   getNurseryCapacityTotal(): number;
+  getRobotHouseWaterStored(): number;
+  getRobotHouseCapacityTotal(): number;
   formatBuildingCost(type: BuildingType): string;
   addRadial(field: Float32Array, gx: number, gy: number, radius: number, amount: number): void;
   getCellsInRadius(gx: number, gy: number, radius: number): number[];

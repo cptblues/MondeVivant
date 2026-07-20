@@ -15,12 +15,12 @@ export enum TerrainType {
 export type GroundCoverStage = 0 | 1 | 2;
 export type TreeStage = 0 | 1 | 2 | 3;
 export type ViewMode = 'world' | 'soil' | 'ecology';
-export type BuildingType = 'pump' | 'nursery' | 'cistern';
+export type BuildingType = 'pump' | 'nursery' | 'cistern' | 'robot-house';
 export type SeedType = 'pioneer' | 'willow' | 'juniper' | 'tamarisk';
 export type PressureLevel = 'strong' | 'medium' | 'weak' | 'none';
 export type PipeSourceType = 'pump' | 'cistern';
-export type RobotRole = 'nursery';
-export type RobotTaskType = 'scan' | 'plant' | 'water-delivery';
+export type RobotRole = 'nursery' | 'restoration';
+export type RobotTaskType = 'scan' | 'plant' | 'water-delivery' | 'prepare_soil' | 'water_plant';
 export type RobotTaskState = 'available' | 'reserved' | 'in-progress' | 'blocked' | 'completed' | 'cancelled';
 export interface PipeSource {
   type: PipeSourceType;
@@ -34,6 +34,8 @@ export type NurseryWorkerState =
   | 'idle'
   | 'to-target'
   | 'planting'
+  | 'preparing'
+  | 'watering'
   | 'returning'
   | 'to-scan'
   | 'scanning'
@@ -64,6 +66,7 @@ export type PlacementTool =
   | { kind: 'scan-zone' }
   | { kind: 'planting-zone'; mode: 'paint'; seed: SeedType }
   | { kind: 'planting-zone'; mode: 'erase' }
+  | { kind: 'restoration-parcel'; homeBuildingId: number; start: { gx: number; gy: number } | null }
   | { kind: 'pipe' }
   | null;
 
@@ -78,6 +81,7 @@ export interface Cell {
   cover: GroundCoverStage;
   coverProgress: number;
   coverStress: number;
+  preparedByRobotHouseId: number | null;
   tree: SeedType | null;
   treeStage: TreeStage;
   treeProgress: number;
@@ -112,7 +116,7 @@ export interface IrrigationDefinition {
 }
 
 export interface WorkerDefinition {
-  role: 'nursery';
+  role: RobotRole;
   capacity?: number;
   speedCellsPerSecond: number;
 }
@@ -156,6 +160,7 @@ export interface BuildingInstance {
   gy: number;
   placedAt: number;
   waterStored: number;
+  seedInventory?: Record<SeedType, number>;
 }
 
 export interface PipeCell {
@@ -218,12 +223,13 @@ export interface ScanZoneSummary {
   blockedReason?: string;
 }
 
-export interface NurseryWorker {
+export interface RobotWorker {
   id: string;
   role: RobotRole;
   state: NurseryWorkerState;
   x: number;
   y: number;
+  homeBuildingId: number | null;
   currentTaskId: string | null;
   targetIndex: number | null;
   targetSeed: SeedType | null;
@@ -233,6 +239,8 @@ export interface NurseryWorker {
   progress: number;
   message: string;
 }
+
+export type NurseryWorker = RobotWorker;
 
 export type RobotTaskTarget =
   | { kind: 'cell'; index: number; gx: number; gy: number }
@@ -249,6 +257,8 @@ export interface RobotTask {
   type: RobotTaskType;
   target: RobotTaskTarget;
   zoneId?: number;
+  parcelId?: string;
+  homeBuildingId?: number;
   seed?: SeedType;
   priority: number;
   state: RobotTaskState;
@@ -257,6 +267,52 @@ export interface RobotTask {
   reservedByWorkerId: string | null;
   blockedReason: string | null;
   createdAt: number;
+  updatedAt: number;
+}
+
+export type RestorationParcelState =
+  | 'unassigned'
+  | 'scanning'
+  | 'waiting_resources'
+  | 'preparing'
+  | 'planting'
+  | 'maintaining'
+  | 'autonomous';
+
+export interface RestorationParcelBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+export interface RestorationParcelProgress {
+  analysis: number;
+  preparation: number;
+  planting: number;
+  maintenance: number;
+  biodiversity: number;
+  autonomy: number;
+}
+
+export interface RestorationParcel {
+  id: string;
+  homeBuildingId: number;
+  bounds: RestorationParcelBounds | null;
+  state: RestorationParcelState;
+  totalTiles: number;
+  analyzedTiles: number;
+  preparedTiles: number;
+  plantableTiles: number;
+  plantedCount: number;
+  vegetationCoverage: number;
+  speciesPresent: number;
+  healthyPlantRatio: number;
+  developedTrees: number;
+  needs: string[];
+  blockers: string[];
+  progress: RestorationParcelProgress;
+  autonomousSince: number | null;
   updatedAt: number;
 }
 

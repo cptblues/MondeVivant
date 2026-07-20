@@ -147,7 +147,7 @@ export function drawBuilding(this: RendererContext, simulation: GameSimulation, 
     }
     if (directPipe) this.drawPipeConnectorDot();
   }
-  if (building.type === 'nursery' && simulation.getPipeCell(building.gx, building.gy)) {
+  if ((building.type === 'nursery' || building.type === 'robot-house') && simulation.getPipeCell(building.gx, building.gy)) {
     this.drawPipeConnectorDot();
   }
   ctx.restore();
@@ -230,6 +230,39 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
     : targetSeed ? `rgb(${this.seedZoneColor(targetSeed)})` : '#34724f';
   const progress = worker.state === 'planting' || worker.state === 'scanning' || worker.state === 'searching-seed' || worker.state === 'loading-water' || worker.state === 'unloading-water' ? worker.progress : null;
   this.drawRobot(px, py, accent, worker.state === 'blocked', progress, worker.waterLoad > 0.1);
+}
+
+export function drawRobotHouseWorkers(this: RendererContext, simulation: GameSimulation): void {
+  const ctx = this.context;
+  for (const worker of simulation.robotHouseWorkers) {
+    const px = worker.x * CELL_SIZE;
+    const py = worker.y * CELL_SIZE;
+    const targetSeed = worker.targetSeed;
+    if (worker.targetIndex !== null) {
+      const tx = ((worker.targetIndex % GRID_WIDTH) + 0.5) * CELL_SIZE;
+      const ty = (Math.floor(worker.targetIndex / GRID_WIDTH) + 0.5) * CELL_SIZE;
+      ctx.save();
+      ctx.strokeStyle = worker.state === 'watering'
+        ? 'rgba(54, 119, 168, .44)'
+        : targetSeed ? `rgba(${this.seedZoneColor(targetSeed)}, .44)` : 'rgba(79, 103, 85, .34)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([5, 6]);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.restore();
+    }
+    const accent = worker.state === 'watering'
+      ? '#3177a8'
+      : worker.state === 'scanning'
+        ? '#357091'
+        : worker.state === 'preparing'
+          ? '#806f36'
+          : targetSeed ? `rgb(${this.seedZoneColor(targetSeed)})` : '#2f7951';
+    const progress = worker.state === 'planting' || worker.state === 'scanning' || worker.state === 'preparing' || worker.state === 'watering' ? worker.progress : null;
+    this.drawRobot(px, py, accent, worker.state === 'blocked', progress, worker.state === 'watering');
+  }
 }
 
 export function drawRobot(this: RendererContext, px: number, py: number, accent: string, blocked: boolean, progress: number | null, carryingWater: boolean): void {
@@ -317,5 +350,6 @@ export const entitiesRenderMethods = {
   drawBuildingWaterGauge,
   drawPipeConnectorDot,
   drawNurseryWorker,
+  drawRobotHouseWorkers,
   drawRobot,
 };

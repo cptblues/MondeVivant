@@ -10,6 +10,8 @@ import type {
   PipeSource,
   PlantingZone,
   PlacementTool,
+  RestorationParcel,
+  RobotWorker,
   RobotTask,
   ScanZone,
   SeedType,
@@ -36,6 +38,8 @@ export interface GameState {
   scanZones: ScanZone[];
   tasks: RobotTask[];
   nurseryWorker: NurseryWorker | null;
+  robotHouseWorkers: RobotWorker[];
+  restorationParcels: RestorationParcel[];
   logs: string[];
   nextBuildingId: number;
   unlockedBuildings: Set<BuildingType>;
@@ -55,17 +59,26 @@ export const createInitialCells = (): Cell[] => createTerrain();
 export const createBuildingTotals = (): Record<BuildingType, number> => ({
   pump: 1,
   nursery: 1,
+  'robot-house': 1,
   cistern: 4,
 });
 
 export const createBuildingCooldowns = (): Record<BuildingType, number> => ({
   pump: 0,
   nursery: 0,
+  'robot-house': 0,
   cistern: 0,
 });
 
 export const createSeedInventory = (): Record<SeedType, number> => ({
   pioneer: 3,
+  willow: 0,
+  juniper: 0,
+  tamarisk: 0,
+});
+
+export const createEmptySeedInventory = (): Record<SeedType, number> => ({
+  pioneer: 0,
   willow: 0,
   juniper: 0,
   tamarisk: 0,

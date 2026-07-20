@@ -30,6 +30,7 @@ export interface UIContext {
   nurseryMode: 'cultivation' | 'research';
   dockSignature: string;
   nurseryRenderSignature: string;
+  robotHouseRenderSignature: string;
   toastTimer: number | null;
 
   update(): void;
@@ -55,6 +56,7 @@ export interface UIContext {
   buildingSubtitle(type: BuildingType): string;
   renderGrowthDiagnostic(index: number): void;
   renderNursery(): void;
+  renderRobotHouse(): void;
   buildWorkerPanel(): string;
   buildNurseryWaterSummary(): string;
   buildSeedSearchAction(): string;

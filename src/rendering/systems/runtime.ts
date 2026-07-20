@@ -35,12 +35,14 @@ export function render(this: RendererContext, simulation: GameSimulation, view: 
   this.drawGroundCover(simulation);
   this.drawScanZones(simulation);
   this.drawPlantingZones(simulation);
+  this.drawRestorationParcels(simulation);
   if (view === 'ecology') this.drawEcologyOverlay(simulation);
 
   const selectedBuilding = simulation.getSelectedBuilding();
   const selectedPipe = simulation.getSelectedPipe();
   const buildingTool = simulation.selectedTool?.kind === 'building' ? simulation.selectedTool : null;
   const scanTool = simulation.selectedTool?.kind === 'scan-zone';
+  const restorationParcelTool = simulation.selectedTool?.kind === 'restoration-parcel';
   const pipeTool = simulation.selectedTool?.kind === 'pipe';
 
   if (selectedBuilding && BUILDINGS[selectedBuilding.type].radiusCells > 0) {
@@ -74,6 +76,10 @@ export function render(this: RendererContext, simulation: GameSimulation, view: 
     const cell = this.cellAtWorld(hover.worldX, hover.worldY);
     if (cell) this.drawActionCells(simulation.getScanZoneCells(cell.x, cell.y), simulation.validateScanZone(cell.x, cell.y).ok);
   }
+  if (restorationParcelTool && hover.inside) {
+    const cell = this.cellAtWorld(hover.worldX, hover.worldY);
+    if (cell) this.drawActionCells(simulation.getRestorationParcelPreviewCells(cell.x, cell.y), simulation.validateRestorationParcelClick(cell.x, cell.y).ok);
+  }
   if (pipeTool && simulation.pipeSource) this.drawPipeReach(simulation);
 
   this.drawPipes(simulation);
@@ -81,6 +87,7 @@ export function render(this: RendererContext, simulation: GameSimulation, view: 
   this.drawTreeStatus(simulation);
   this.drawBuildings(simulation);
   this.drawNurseryWorker(simulation);
+  this.drawRobotHouseWorkers(simulation);
   this.drawPlacementPreview(simulation, hover);
 
   if (simulation.selectedTool || selectedBuilding || selectedPipe) this.drawGrid();

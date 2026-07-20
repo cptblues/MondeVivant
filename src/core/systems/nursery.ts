@@ -6,8 +6,12 @@ import type { SimulationContext } from '../simulationContext';
 import { clamp } from '../../utils/math';
 
 export function validateSeedPlacement(this: SimulationContext, seed: SeedType, gx: number, gy: number): PlacementResult {
+  return this.validateSeedPlacementForInventory(seed, gx, gy, this.seedCount(seed));
+}
+
+export function validateSeedPlacementForInventory(this: SimulationContext, seed: SeedType, gx: number, gy: number, availableSeeds: number): PlacementResult {
   if (!this.isSeedUnlocked(seed)) return { ok: false, message: 'Graine encore inconnue' };
-  if (this.seedCount(seed) <= 0) return { ok: false, message: 'Plus aucune graine disponible' };
+  if (availableSeeds <= 0) return { ok: false, message: 'Plus aucune graine disponible' };
   if (!this.inBounds(gx, gy)) return { ok: false, message: 'Hors de la carte' };
   const cell = this.cells[this.index(gx, gy)];
   if (cell.terrain === TerrainType.Rock) return { ok: false, message: 'Impossible de planter dans la roche' };
@@ -422,6 +426,7 @@ export function getResearchableSoils(this: SimulationContext): TerrainType[] {
 
 export const nurseryMethods = {
   validateSeedPlacement,
+  validateSeedPlacementForInventory,
   plantSeed,
   startCultivation,
   startResearch,

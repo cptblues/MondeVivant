@@ -22,6 +22,8 @@ export function reset(this: SimulationContext): void {
   this.scanZones = [];
   this.tasks = [];
   this.nurseryWorker = null;
+  this.robotHouseWorkers = [];
+  this.restorationParcels = [];
   this.nextBuildingId = 1;
   this.nextPlantingZoneId = 1;
   this.nextScanZoneId = 1;
@@ -132,8 +134,10 @@ export function update(this: SimulationContext, deltaSeconds: number): void {
     this.updateGroundCover(cell, fields.growthBoost[i], dt);
     this.updateTree(i, fields.growthBoost[i], dt);
   }
+  this.updateRestorationParcels(dt);
   this.syncRobotTasks();
   this.updateNurseryWorker(dt);
+  this.updateRobotHouseWorkers(dt);
   this.checkMilestones();
 }
 
@@ -161,6 +165,10 @@ export function selectTool(this: SimulationContext, tool: PlacementTool): void {
   if (tool?.kind === 'planting-zone') {
     if (!this.hasNursery()) { this.toast('Placez d’abord la pépinière pour tracer des zones'); return; }
     if (tool.mode === 'paint' && !this.isSeedUnlocked(tool.seed)) return;
+  }
+  if (tool?.kind === 'restoration-parcel') {
+    const house = this.getRobotHouseBuilding(tool.homeBuildingId);
+    if (!house) { this.toast('Maison de robot introuvable'); return; }
   }
   if (tool?.kind === 'scan-zone' && !this.hasNursery()) { this.toast('Placez d’abord la pépinière pour lancer des scans'); return; }
   if (tool?.kind === 'pipe' && !this.isPipeUnlocked()) return;
@@ -205,6 +213,7 @@ export function placeSelected(this: SimulationContext, gx: number, gy: number): 
   if (this.selectedTool.kind === 'building') return this.placeBuilding(this.selectedTool.type, gx, gy);
   if (this.selectedTool.kind === 'scan-zone') return this.createScanZone(gx, gy);
   if (this.selectedTool.kind === 'planting-zone') return this.paintPlantingZone(gx, gy);
+  if (this.selectedTool.kind === 'restoration-parcel') return this.handleRestorationParcelClick(gx, gy);
   return this.handlePipeToolClick(gx, gy);
 }
 
@@ -213,6 +222,7 @@ export function validateSelected(this: SimulationContext, gx: number, gy: number
   if (this.selectedTool.kind === 'building') return this.validateBuildingPlacement(this.selectedTool.type, gx, gy);
   if (this.selectedTool.kind === 'scan-zone') return this.validateScanZone(gx, gy);
   if (this.selectedTool.kind === 'planting-zone') return this.validatePlantingZonePaint(gx, gy);
+  if (this.selectedTool.kind === 'restoration-parcel') return this.validateRestorationParcelClick(gx, gy);
   return this.validatePipeClick(gx, gy);
 }
 

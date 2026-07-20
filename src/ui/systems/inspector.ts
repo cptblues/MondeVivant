@@ -14,6 +14,7 @@ export function updateInspector(this: UIContext): void {
   const pipeSection = element<HTMLElement>('#pipeSection');
   const cellSection = element<HTMLElement>('#cellSection');
   const nurseryPanel = element<HTMLElement>('#nurseryPanel');
+  const robotHousePanel = element<HTMLElement>('#robotHousePanel');
   const actions = element<HTMLElement>('#inspectorActions');
   const removeButton = element<HTMLButtonElement>('#removeButton');
   const clearNetworkButton = element<HTMLButtonElement>('#clearNetworkButton');
@@ -27,6 +28,7 @@ export function updateInspector(this: UIContext): void {
   pipeSection.hidden = true;
   cellSection.hidden = true;
   nurseryPanel.hidden = true;
+  robotHousePanel.hidden = true;
   actions.hidden = true;
   removeButton.hidden = true;
   clearNetworkButton.hidden = true;
@@ -47,7 +49,9 @@ export function updateInspector(this: UIContext): void {
     actions.hidden = false;
     removeButton.hidden = false;
     nurseryPanel.hidden = building.type !== 'nursery';
+    robotHousePanel.hidden = building.type !== 'robot-house';
     if (building.type !== 'nursery') this.nurseryRenderSignature = '';
+    if (building.type !== 'robot-house') this.robotHouseRenderSignature = '';
     const waterWrap = element<HTMLElement>('#buildingWaterWrap');
     const waterStatus = this.simulation.getBuildingWaterStatus(building);
     waterWrap.hidden = !waterStatus;
@@ -74,6 +78,7 @@ export function updateInspector(this: UIContext): void {
       clearNetworkButton.textContent = building.type === 'cistern' ? 'Démonter le réseau secondaire' : 'Démonter le réseau';
     }
     if (building.type === 'nursery') this.renderNursery();
+    if (building.type === 'robot-house') this.renderRobotHouse();
     return;
   }
 
@@ -144,6 +149,7 @@ export function updateInspector(this: UIContext): void {
 export function buildingSubtitle(this: UIContext, type: BuildingType): string {
   if (type === 'pump') return 'Source de réserve, réseau et humidité locale';
   if (type === 'cistern') return 'Stockage d’eau, humidité locale et source secondaire';
+  if (type === 'robot-house') return 'Maison, robot et parcelle restaurée';
   return 'Atelier de graines et robot planteur';
 }
 

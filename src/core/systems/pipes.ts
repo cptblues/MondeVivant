@@ -17,6 +17,8 @@ import {
   PUMP_IRRIGATION_RADIUS,
   PUMP_LOCAL_IRRIGATION_CONSUMPTION,
   PUMP_PRESSURE_WATER_NORMALIZER,
+  ROBOT_HOUSE_CAPACITY,
+  ROBOT_HOUSE_PIPE_FILL_RATE,
 } from '../gameConfig';
 import type { PipeCell, PipeSource, PipeSourceType, PlacementResult, PressureLevel } from '../types';
 import type { SimulationContext } from '../simulationContext';
@@ -218,6 +220,22 @@ export function updateBuildingsFromPipes(this: SimulationContext, dt: number): v
     this.consumeSourceWater(pipe, amount);
     nurseryFilled = true;
   }
+  let robotHouseFilled = false;
+  for (const house of this.buildings) {
+    if (house.type !== 'robot-house' || house.waterStored >= ROBOT_HOUSE_CAPACITY) continue;
+    const pipe = this.getPipeCell(house.gx, house.gy);
+    if (!pipe) continue;
+    const bestLevel = this.getPressureLevelAt(pipe.gx, pipe.gy);
+    const fillRate = this.getRobotHousePipeFillRate(bestLevel);
+    if (fillRate <= 0) continue;
+    const available = this.getSourceWater(pipe);
+    if (available <= 0.05) continue;
+    const amount = Math.min(fillRate * dt, ROBOT_HOUSE_CAPACITY - house.waterStored, available);
+    if (amount <= 0) continue;
+    house.waterStored += amount;
+    this.consumeSourceWater(pipe, amount);
+    robotHouseFilled = true;
+  }
   if (becameReady && !this.milestones.has('cistern-ready')) {
     this.milestones.add('cistern-ready');
     this.completedTutorialSteps.add('fill-cistern');
@@ -226,6 +244,7 @@ export function updateBuildingsFromPipes(this: SimulationContext, dt: number): v
     this.notify();
   }
   if (nurseryFilled) this.wakeNurseryWorker();
+  if (robotHouseFilled) this.notify();
 }
 
 export function getCisternPipeFillRate(this: SimulationContext, level: PressureLevel): number {
@@ -234,6 +253,10 @@ export function getCisternPipeFillRate(this: SimulationContext, level: PressureL
 
 export function getNurseryPipeFillRate(this: SimulationContext, level: PressureLevel): number {
   return NURSERY_PIPE_FILL_RATE[level];
+}
+
+export function getRobotHousePipeFillRate(this: SimulationContext, level: PressureLevel): number {
+  return ROBOT_HOUSE_PIPE_FILL_RATE[level];
 }
 
 export function consumeSourceWater(this: SimulationContext, source: PipeSource | PipeCell, amount: number): void {
@@ -363,6 +386,7 @@ export const pipesMethods = {
   updateBuildingsFromPipes,
   getCisternPipeFillRate,
   getNurseryPipeFillRate,
+  getRobotHousePipeFillRate,
   consumeSourceWater,
   getWaterProduction,
   getWaterConsumption,

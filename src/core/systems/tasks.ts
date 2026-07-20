@@ -30,6 +30,8 @@ export function upsertRobotTask(
     type: RobotTaskType;
     target: RobotTaskTarget;
     zoneId?: number;
+    parcelId?: string;
+    homeBuildingId?: number;
     seed?: SeedType;
     priority: number;
     requiredResources?: RobotTaskResources;
@@ -46,6 +48,8 @@ export function upsertRobotTask(
       type: input.type,
       target: input.target,
       zoneId: input.zoneId,
+      parcelId: input.parcelId,
+      homeBuildingId: input.homeBuildingId,
       seed: input.seed,
       priority: input.priority,
       state: blockedReason ? 'blocked' : 'available',
@@ -62,6 +66,8 @@ export function upsertRobotTask(
   task.type = input.type;
   task.target = input.target;
   task.zoneId = input.zoneId;
+  task.parcelId = input.parcelId;
+  task.homeBuildingId = input.homeBuildingId;
   task.seed = input.seed;
   task.priority = input.priority;
   task.requiredResources = input.requiredResources ?? {};
@@ -85,6 +91,9 @@ export function getRobotTaskPosition(this: SimulationContext, task: RobotTask): 
 }
 
 export function getRobotTaskBlockedReason(this: SimulationContext, task: RobotTask): string | null {
+  if (task.homeBuildingId !== undefined) {
+    return this.getRestorationTaskBlockedReason(task);
+  }
   if (task.type === 'scan') {
     const zone = task.zoneId === undefined ? null : this.scanZones.find((candidate) => candidate.id === task.zoneId);
     if (!zone) return 'Zone de scan retirée';
@@ -175,6 +184,7 @@ export function getTasksForPlantingZone(this: SimulationContext, zoneId: number)
 
 export function syncRobotTasks(this: SimulationContext): void {
   const desiredIds = new Set<string>();
+  this.syncRestorationTasks(desiredIds);
 
   for (const zone of this.scanZones) {
     const taskId = `scan:${zone.id}`;

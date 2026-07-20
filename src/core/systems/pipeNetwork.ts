@@ -124,10 +124,12 @@ export function getPipeTargetOptions(this: SimulationContext, source: PipeSource
       if (existingPipe && !this.isPipeFromSource(existingPipe, source)) return { ok: false, message: 'Un autre réseau occupe déjà la cuve', targets: [] };
       return { ok: true, message: 'Relier directement la cuve', targets: [{ x: targetX, y: targetY }] };
     }
-    if ((source.type === 'pump' || source.type === 'cistern') && targetBuilding.type === 'nursery') {
+    if ((source.type === 'pump' || source.type === 'cistern') && (targetBuilding.type === 'nursery' || targetBuilding.type === 'robot-house')) {
       const existingPipe = this.getPipeCell(targetX, targetY);
-      if (existingPipe && !this.isPipeFromSource(existingPipe, source)) return { ok: false, message: 'Un autre réseau occupe déjà la pépinière', targets: [] };
-      return { ok: true, message: 'Relier directement la pépinière', targets: [{ x: targetX, y: targetY }] };
+      if (existingPipe && !this.isPipeFromSource(existingPipe, source)) {
+        return { ok: false, message: targetBuilding.type === 'nursery' ? 'Un autre réseau occupe déjà la pépinière' : 'Un autre réseau occupe déjà la maison de robot', targets: [] };
+      }
+      return { ok: true, message: targetBuilding.type === 'nursery' ? 'Relier directement la pépinière' : 'Relier directement la maison de robot', targets: [{ x: targetX, y: targetY }] };
     }
     return { ok: false, message: 'Une construction occupe la destination', targets: [] };
   }
@@ -166,7 +168,7 @@ export function canPipeOccupy(this: SimulationContext, source: PipeSource, gx: n
 
 export function canPipeEnterBuilding(this: SimulationContext, source: PipeSource, building: BuildingInstance): boolean {
   if (source.type === 'pump' && building.type === 'cistern') return true;
-  if ((source.type === 'pump' || source.type === 'cistern') && building.type === 'nursery') return true;
+  if ((source.type === 'pump' || source.type === 'cistern') && (building.type === 'nursery' || building.type === 'robot-house')) return true;
   return false;
 }
 

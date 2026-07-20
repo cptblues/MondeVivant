@@ -16,6 +16,7 @@ export class UIController {
   public nurseryMode: 'cultivation' | 'research' = 'cultivation';
   public dockSignature = '';
   public nurseryRenderSignature = '';
+  public robotHouseRenderSignature = '';
   public toastTimer: number | null = null;
 
   constructor(

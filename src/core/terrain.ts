@@ -18,6 +18,7 @@ export const createTerrain = (): Cell[] => {
     cover: 0,
     coverProgress: 0,
     coverStress: 0,
+    preparedByRobotHouseId: null,
     tree: null,
     treeStage: 0,
     treeProgress: 0,
