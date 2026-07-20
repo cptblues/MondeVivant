@@ -2,7 +2,6 @@ import { createTerrain } from './terrain';
 import type {
   BuildingInstance,
   BuildingType,
-  CarrierWorker,
   Cell,
   FieldSet,
   NurseryJob,
@@ -35,7 +34,6 @@ export interface GameState {
   plantingZones: PlantingZone[];
   scanZones: ScanZone[];
   nurseryWorker: NurseryWorker | null;
-  carrierWorker: CarrierWorker | null;
   logs: string[];
   nextBuildingId: number;
   unlockedBuildings: Set<BuildingType>;
@@ -54,18 +52,14 @@ export const createInitialCells = (): Cell[] => createTerrain();
 
 export const createBuildingTotals = (): Record<BuildingType, number> => ({
   pump: 1,
-  scanner: 1,
   nursery: 1,
   cistern: 4,
-  carrier: 0,
 });
 
 export const createBuildingCooldowns = (): Record<BuildingType, number> => ({
   pump: 0,
-  scanner: 0,
   nursery: 0,
   cistern: 0,
-  carrier: 0,
 });
 
 export const createSeedInventory = (): Record<SeedType, number> => ({

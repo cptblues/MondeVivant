@@ -1,5 +1,23 @@
 import { BUILDINGS } from '../config';
-import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_CAPACITY, OUTLET_IRRIGATION, PRESSURE_HYSTERESIS_MARGIN, PUMP_IRRIGATION_RADIUS } from '../gameConfig';
+import {
+  CISTERN_CAPACITY,
+  CISTERN_LOCAL_IRRIGATION_CONSUMPTION,
+  CISTERN_PIPE_FILL_RATE,
+  CISTERN_SOURCE_MIN_WATER,
+  NURSERY_CAPACITY,
+  NURSERY_PIPE_FILL_RATE,
+  OUTLET_CONSUMPTION,
+  OUTLET_IRRIGATION,
+  PRESSURE_BRANCH_PENALTY,
+  PRESSURE_DISTANCE_PENALTY,
+  PRESSURE_HYSTERESIS_MARGIN,
+  PRESSURE_SHARED_OUTLET_PENALTY,
+  PRESSURE_THRESHOLDS,
+  PRESSURE_UPSTREAM_OUTLET_PENALTY,
+  PUMP_IRRIGATION_RADIUS,
+  PUMP_LOCAL_IRRIGATION_CONSUMPTION,
+  PUMP_PRESSURE_WATER_NORMALIZER,
+} from '../gameConfig';
 import type { PipeCell, PipeSource, PipeSourceType, PlacementResult, PressureLevel } from '../types';
 import type { SimulationContext } from '../simulationContext';
 import { clamp } from '../../utils/math';
@@ -120,7 +138,7 @@ export function getPressureLevelAt(this: SimulationContext, gx: number, gy: numb
   const pipe = this.getPipeCell(gx, gy);
   if (!pipe) return 'none';
   const score = this.getPressureScore(pipe);
-  const previousLevel = pipe.pressureLevel === 'none' && score >= 12 ? undefined : pipe.pressureLevel;
+  const previousLevel = pipe.pressureLevel === 'none' && score >= PRESSURE_THRESHOLDS.weak ? undefined : pipe.pressureLevel;
   pipe.pressureLevel = this.pressureLevelFromScore(score, previousLevel);
   return pipe.pressureLevel;
 }
@@ -144,7 +162,7 @@ export function getOutletPreview(this: SimulationContext, gx: number, gy: number
   if (!pipe) return { level: 'none', cells: [] };
   const extraOpenOutlet = pipe.outlet && pipe.outletOpen ? 0 : 1;
   const score = this.getPressureScore(pipe, extraOpenOutlet);
-  const previousLevel = pipe.pressureLevel === 'none' && score >= 12 ? undefined : pipe.pressureLevel;
+  const previousLevel = pipe.pressureLevel === 'none' && score >= PRESSURE_THRESHOLDS.weak ? undefined : pipe.pressureLevel;
   const level = this.pressureLevelFromScore(score, previousLevel);
   return { level, cells: this.getIrrigatedCellsForLevel(gx, gy, level) };
 }
@@ -159,6 +177,13 @@ export function drainCisternOutlets(this: SimulationContext, dt: number): void {
     const cistern = this.getPipeSourceBuilding(pipe);
     if (!cistern || cistern.type !== 'cistern') continue;
     cistern.waterStored = Math.max(0, cistern.waterStored - this.getOutletConsumptionRate(pipe) * dt);
+  }
+}
+
+export function drainLocalIrrigation(this: SimulationContext, dt: number): void {
+  for (const cistern of this.buildings) {
+    if (cistern.type !== 'cistern' || cistern.waterStored <= 0.05) continue;
+    cistern.waterStored = Math.max(0, cistern.waterStored - CISTERN_LOCAL_IRRIGATION_CONSUMPTION * dt);
   }
 }
 
@@ -204,17 +229,11 @@ export function updateBuildingsFromPipes(this: SimulationContext, dt: number): v
 }
 
 export function getCisternPipeFillRate(this: SimulationContext, level: PressureLevel): number {
-  if (level === 'strong') return 4;
-  if (level === 'medium') return 2.35;
-  if (level === 'weak') return 1.05;
-  return 0;
+  return CISTERN_PIPE_FILL_RATE[level];
 }
 
 export function getNurseryPipeFillRate(this: SimulationContext, level: PressureLevel): number {
-  if (level === 'strong') return 2.8;
-  if (level === 'medium') return 1.65;
-  if (level === 'weak') return 0.75;
-  return 0;
+  return NURSERY_PIPE_FILL_RATE[level];
 }
 
 export function consumeSourceWater(this: SimulationContext, source: PipeSource | PipeCell, amount: number): void {
@@ -238,6 +257,19 @@ export function getWaterConsumption(this: SimulationContext): number {
     if (pipe.sourceType !== 'pump') continue;
     total += this.getOutletConsumptionRate(pipe);
   }
+  if (this.waterResource > 0.05) {
+    total += this.buildings.filter((building) => building.type === 'pump').length * PUMP_LOCAL_IRRIGATION_CONSUMPTION;
+  }
+  return total;
+}
+
+export function getCisternWaterConsumption(this: SimulationContext): number {
+  let total = 0;
+  for (const pipe of this.pipes) {
+    if (!pipe.outlet || !pipe.outletOpen || pipe.sourceType !== 'cistern') continue;
+    total += this.getOutletConsumptionRate(pipe);
+  }
+  total += this.buildings.filter((building) => building.type === 'cistern' && building.waterStored > 0.05).length * CISTERN_LOCAL_IRRIGATION_CONSUMPTION;
   return total;
 }
 
@@ -249,13 +281,13 @@ export function getPressureScore(this: SimulationContext, pipe: PipeCell, extraO
   if (!path.length) return 0;
   const upstreamOpenOutlets = path.slice(0, -1).filter((candidate) => candidate.outlet && candidate.outletOpen).length;
   const networkOpenOutlets = this.pipes.filter((candidate) => this.isPipeFromSource(candidate, pipe) && candidate.outlet && candidate.outletOpen).length + extraOpenOutlets;
-  const branchPenalty = this.countBranches(pipe.sourceType, pipe.sourceId) * 3;
+  const branchPenalty = this.countBranches(pipe.sourceType, pipe.sourceId) * PRESSURE_BRANCH_PENALTY;
   const resourceFactor = pipe.sourceType === 'cistern'
     ? clamp(sourceWater / CISTERN_SOURCE_MIN_WATER, 0.2, 1)
-    : clamp(sourceWater / 8, 0.25, 1);
-  const distancePenalty = pipe.sourceType === 'cistern' ? 6 : 5;
-  const upstreamOutletPenalty = pipe.sourceType === 'cistern' ? 36 : 32;
-  const sharedOutletPenalty = pipe.sourceType === 'cistern' ? 10 : 8;
+    : clamp(sourceWater / PUMP_PRESSURE_WATER_NORMALIZER, 0.25, 1);
+  const distancePenalty = PRESSURE_DISTANCE_PENALTY[pipe.sourceType];
+  const upstreamOutletPenalty = PRESSURE_UPSTREAM_OUTLET_PENALTY[pipe.sourceType];
+  const sharedOutletPenalty = PRESSURE_SHARED_OUTLET_PENALTY[pipe.sourceType];
   return Math.max(0, (100
     - pipe.distance * distancePenalty
     - upstreamOpenOutlets * upstreamOutletPenalty
@@ -264,39 +296,44 @@ export function getPressureScore(this: SimulationContext, pipe: PipeCell, extraO
 }
 
 export function pressureLevelFromScore(this: SimulationContext, score: number, previousLevel?: PressureLevel): PressureLevel {
+  const { strong, medium, weak } = PRESSURE_THRESHOLDS;
   if (previousLevel === 'strong') {
-    if (score >= 65 - PRESSURE_HYSTERESIS_MARGIN) return 'strong';
-    if (score >= 38 - PRESSURE_HYSTERESIS_MARGIN) return 'medium';
-    if (score >= 12 - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
+    if (score >= strong - PRESSURE_HYSTERESIS_MARGIN) return 'strong';
+    if (score >= medium - PRESSURE_HYSTERESIS_MARGIN) return 'medium';
+    if (score >= weak - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
     return 'none';
   }
   if (previousLevel === 'medium') {
-    if (score >= 65 + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
-    if (score >= 38 - PRESSURE_HYSTERESIS_MARGIN) return 'medium';
-    if (score >= 12 - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
+    if (score >= strong + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
+    if (score >= medium - PRESSURE_HYSTERESIS_MARGIN) return 'medium';
+    if (score >= weak - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
     return 'none';
   }
   if (previousLevel === 'weak') {
-    if (score >= 65 + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
-    if (score >= 38 + PRESSURE_HYSTERESIS_MARGIN) return 'medium';
-    if (score >= 12 - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
+    if (score >= strong + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
+    if (score >= medium + PRESSURE_HYSTERESIS_MARGIN) return 'medium';
+    if (score >= weak - PRESSURE_HYSTERESIS_MARGIN) return 'weak';
     return 'none';
   }
   if (previousLevel === 'none') {
-    if (score >= 65 + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
-    if (score >= 38 + PRESSURE_HYSTERESIS_MARGIN) return 'medium';
-    if (score >= 12 + PRESSURE_HYSTERESIS_MARGIN) return 'weak';
+    if (score >= strong + PRESSURE_HYSTERESIS_MARGIN) return 'strong';
+    if (score >= medium + PRESSURE_HYSTERESIS_MARGIN) return 'medium';
+    if (score >= weak + PRESSURE_HYSTERESIS_MARGIN) return 'weak';
     return 'none';
   }
-  if (score >= 65) return 'strong';
-  if (score >= 38) return 'medium';
-  if (score >= 12) return 'weak';
+  if (score >= strong) return 'strong';
+  if (score >= medium) return 'medium';
+  if (score >= weak) return 'weak';
   return 'none';
 }
 
 export function getOutletConsumptionRate(this: SimulationContext, pipe: PipeCell): number {
   const level = this.getPressureLevelAt(pipe.gx, pipe.gy);
-  return level === 'strong' ? 0.82 : level === 'medium' ? 0.5 : level === 'weak' ? 0.22 : 0;
+  return this.getOutletConsumptionForLevel(level, true);
+}
+
+export function getOutletConsumptionForLevel(this: SimulationContext, level: PressureLevel, open: boolean): number {
+  return open ? OUTLET_CONSUMPTION[level] : 0;
 }
 
 export function getSourceWater(this: SimulationContext, source: PipeSource | PipeCell): number {
@@ -322,14 +359,17 @@ export const pipesMethods = {
   getOutletPreview,
   getIrrigatedCellsForLevel,
   drainCisternOutlets,
+  drainLocalIrrigation,
   updateBuildingsFromPipes,
   getCisternPipeFillRate,
   getNurseryPipeFillRate,
   consumeSourceWater,
   getWaterProduction,
   getWaterConsumption,
+  getCisternWaterConsumption,
   getPressureScore,
   pressureLevelFromScore,
   getOutletConsumptionRate,
+  getOutletConsumptionForLevel,
   getSourceWater,
 };

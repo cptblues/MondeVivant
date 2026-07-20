@@ -1,5 +1,5 @@
 import { SEEDS } from '../config';
-import { CARRIER_TRANSFER_DURATION, CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_CAPACITY, NURSERY_WORKER_CAPACITY, SEED_SEARCH_DURATION, WORKER_PLANT_DURATION } from '../gameConfig';
+import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_CAPACITY, NURSERY_WORKER_CAPACITY, SEED_SEARCH_DURATION, WORKER_PLANT_DURATION, WORKER_TRANSFER_DURATION } from '../gameConfig';
 import { GRID_WIDTH } from '../types';
 import type { BuildingInstance, NurseryWorker } from '../types';
 import type { SimulationContext } from '../simulationContext';
@@ -70,7 +70,7 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'loading-water') {
-    worker.progress = Math.min(1, worker.progress + dt / CARRIER_TRANSFER_DURATION);
+    worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
     if (worker.progress < 1) return;
     const target = getNurseryWaterDeliveryTarget(this, worker);
     if (!target) {
@@ -117,7 +117,7 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'unloading-water') {
-    worker.progress = Math.min(1, worker.progress + dt / CARRIER_TRANSFER_DURATION);
+    worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
     if (worker.progress < 1) return;
     const target = getNurseryWaterDeliveryTarget(this, worker);
     if (target) {

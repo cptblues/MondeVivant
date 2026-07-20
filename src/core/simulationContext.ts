@@ -2,7 +2,6 @@ import type {
   BuildingInstance,
   BuildingType,
   BuildingWaterStatus,
-  CarrierWorker,
   Cell,
   CellGrowthDiagnostics,
   FieldSet,
@@ -66,7 +65,6 @@ export interface SimulationContext {
   plantingZones: PlantingZone[];
   scanZones: ScanZone[];
   nurseryWorker: NurseryWorker | null;
-  carrierWorker: CarrierWorker | null;
   logs: string[];
   readonly events: GameEvents;
   nextBuildingId: number;
@@ -162,7 +160,6 @@ export interface SimulationContext {
   updateGroundCover(cell: Cell, boost: number, dt: number): void;
   updateTree(index: number, boost: number, dt: number): void;
   tryNaturalSeeding(parentIndex: number): void;
-  completeScan(building: BuildingInstance): void;
   advanceNurseryJob(dt: number): void;
   tryStartNurseryCycle(job: NurseryJob): boolean;
   pauseNurseryJob(job: NurseryJob, reason: string): void;
@@ -175,9 +172,6 @@ export interface SimulationContext {
   ensureNurseryWorker(nursery: BuildingInstance): NurseryWorker;
   wakeNurseryWorker(): void;
   setNurseryWorkerBlocked(worker: NurseryWorker, message: string): void;
-  ensureCarrierWorker(carrier: BuildingInstance): CarrierWorker;
-  findCarrierTarget(): BuildingInstance | null;
-  setCarrierBlocked(worker: CarrierWorker, message: string): void;
   findNextWorkerTarget(worker: NurseryWorker): WorkerTarget | null;
   findNextScanTarget(worker: NurseryWorker): ScanTarget | null;
   isScanTargetQueued(zoneId: number): boolean;
@@ -190,9 +184,8 @@ export interface SimulationContext {
   shouldFetchCisternWater(nursery: BuildingInstance, cistern: BuildingInstance): boolean;
   hasUsableNurseryPipe(nursery: BuildingInstance): boolean;
   isWorkerTargetQueued(seed: SeedType, index: number): boolean;
-  moveWorkerToward(worker: NurseryWorker | CarrierWorker, x: number, y: number, dt: number, speed?: number): boolean;
+  moveWorkerToward(worker: NurseryWorker, x: number, y: number, dt: number, speed?: number): boolean;
   getNurseryBuilding(): BuildingInstance | null;
-  getCarrierBuilding(): BuildingInstance | null;
   getPumpBuilding(): BuildingInstance | null;
   workerHome(building: BuildingInstance): { x: number; y: number };
   syncTutorialProgress(): void;
@@ -200,16 +193,18 @@ export interface SimulationContext {
   unlockBuilding(type: BuildingType, message: string): void;
   drainCisternOutlets(dt: number): void;
   updateBuildingsFromPipes(dt: number): void;
+  drainLocalIrrigation(dt: number): void;
   getCisternPipeFillRate(level: PressureLevel): number;
   getNurseryPipeFillRate(level: PressureLevel): number;
   consumeSourceWater(source: PipeSource | PipeCell, amount: number): void;
-  updateCarrierWorker(dt: number): void;
   computeFields(): FieldSet;
   getWaterProduction(): number;
   getWaterConsumption(): number;
+  getCisternWaterConsumption(): number;
   getPressureScore(pipe: PipeCell, extraOpenOutlets?: number): number;
   pressureLevelFromScore(score: number, previousLevel?: PressureLevel): PressureLevel;
   getOutletConsumptionRate(pipe: PipeCell): number;
+  getOutletConsumptionForLevel(level: PressureLevel, open: boolean): number;
   getSourceWater(source: PipeSource | PipeCell): number;
   countBranches(sourceType: PipeSourceType, sourceId: number): number;
   getPipePathFromSource(target: PipeCell): PipeCell[];

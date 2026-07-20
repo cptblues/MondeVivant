@@ -81,7 +81,6 @@ export function render(this: RendererContext, simulation: GameSimulation, view: 
   this.drawTreeStatus(simulation);
   this.drawBuildings(simulation);
   this.drawNurseryWorker(simulation);
-  this.drawCarrierWorker(simulation);
   this.drawPlacementPreview(simulation, hover);
 
   if (simulation.selectedTool || selectedBuilding || selectedPipe) this.drawGrid();

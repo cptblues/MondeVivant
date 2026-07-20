@@ -1,13 +1,13 @@
 import { RESEARCH_SEED_FOR_SOIL, SEEDS } from '../config';
-import { CISTERN_CAPACITY, CISTERN_IRRIGATION_AMOUNT, CISTERN_IRRIGATION_RADIUS, MAX_SEEDS_PER_TREE, OUTLET_IRRIGATION, PUMP_IRRIGATION_AMOUNT, PUMP_IRRIGATION_RADIUS } from '../gameConfig';
+import { CISTERN_CAPACITY, CISTERN_IRRIGATION_AMOUNT, CISTERN_IRRIGATION_RADIUS, GROUND_COVER, MAX_SEEDS_PER_TREE, OUTLET_IRRIGATION, PUMP_IRRIGATION_AMOUNT, PUMP_IRRIGATION_RADIUS } from '../gameConfig';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { Cell, CellGrowthDiagnostics, FieldSet } from '../types';
 import type { SimulationContext } from '../simulationContext';
 import { clamp, distance, hash } from '../../utils/math';
 
 export function updateGroundCover(this: SimulationContext, cell: Cell, boost: number, dt: number): void {
-  const mossGood = cell.water >= 15;
-  const grassGood = cell.water >= 21 && cell.humus >= 4.5;
+  const mossGood = cell.water >= GROUND_COVER.mossWater;
+  const grassGood = cell.water >= GROUND_COVER.grassWater && cell.humus >= GROUND_COVER.grassHumus;
   if (cell.cover === 0) {
     if (mossGood) cell.coverProgress += 0.02 * boost * dt;
     else cell.coverProgress = Math.max(0, cell.coverProgress - 0.004 * dt);
@@ -38,7 +38,7 @@ export function updateGroundCover(this: SimulationContext, cell: Cell, boost: nu
     }
     return;
   }
-  const stableGrass = cell.water >= 13 && cell.humus >= 3;
+  const stableGrass = cell.water >= GROUND_COVER.stableGrassWater && cell.humus >= GROUND_COVER.stableGrassHumus;
   cell.coverStress = stableGrass ? Math.max(0, cell.coverStress - dt) : cell.coverStress + dt;
   if (cell.coverStress > 25) {
     cell.cover = 1;
@@ -170,7 +170,7 @@ export function computeFields(this: SimulationContext): FieldSet {
     }
   }
   for (const building of this.buildings) {
-    if (building.type === 'pump') {
+    if (building.type === 'pump' && this.waterResource > 0.05) {
       this.addRadial(fields.irrigationWater, building.gx, building.gy, PUMP_IRRIGATION_RADIUS, PUMP_IRRIGATION_AMOUNT);
       for (const index of this.getPumpIrrigatedCells(building.gx, building.gy)) fields.growthBoost[index] *= 1.1;
     } else if (building.type === 'cistern' && building.waterStored > 0.25) {

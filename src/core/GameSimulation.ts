@@ -4,7 +4,6 @@ import type { GameEvents, SimulationContext } from './simulationContext';
 import type {
   BuildingInstance,
   BuildingType,
-  CarrierWorker,
   Cell,
   FieldSet,
   NurseryJob,
@@ -37,7 +36,6 @@ export class GameSimulation {
   public plantingZones: PlantingZone[] = [];
   public scanZones: ScanZone[] = [];
   public nurseryWorker: NurseryWorker | null = null;
-  public carrierWorker: CarrierWorker | null = null;
   public logs: string[] = [];
 
   public nextBuildingId = 1;

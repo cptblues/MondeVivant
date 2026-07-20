@@ -82,7 +82,6 @@ export function buildBuildingButton(this: UIContext, type: BuildingType): string
   const effects = [
     definition.effects.resourceRate ? `+${definition.effects.resourceRate.toFixed(1)} 💧/s` : '',
     definition.radiusCells > 0 ? `Rayon ${definition.radiusCells} cases` : 'Aucun rayon écologique',
-    definition.reuseCooldownSeconds ? `Réutilisation ${definition.reuseCooldownSeconds} s` : '',
   ].filter(Boolean);
   const cost = this.buildCostLabel(type);
   return `<button class="tool-button" type="button" data-building="${type}"><span class="tool-icon">${definition.icon}</span><span class="tool-count" data-count>0</span><span class="tool-tooltip"><span class="tooltip-head"><i>${definition.icon}</i><span><strong>${definition.name}</strong><small>Coût ${cost}</small></span></span><span class="tooltip-copy">${definition.description}</span><span class="tooltip-tags">${effects.map((effect) => `<em>${effect}</em>`).join('')}</span></span></button>`;

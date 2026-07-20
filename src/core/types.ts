@@ -15,7 +15,7 @@ export enum TerrainType {
 export type GroundCoverStage = 0 | 1 | 2;
 export type TreeStage = 0 | 1 | 2 | 3;
 export type ViewMode = 'world' | 'soil' | 'ecology';
-export type BuildingType = 'pump' | 'scanner' | 'nursery' | 'cistern' | 'carrier';
+export type BuildingType = 'pump' | 'nursery' | 'cistern';
 export type SeedType = 'pioneer' | 'willow' | 'juniper' | 'tamarisk';
 export type PressureLevel = 'strong' | 'medium' | 'weak' | 'none';
 export type PipeSourceType = 'pump' | 'cistern';
@@ -42,7 +42,6 @@ export type NurseryWorkerState =
   | 'to-nursery'
   | 'unloading-water'
   | 'blocked';
-export type CarrierWorkerState = 'idle' | 'to-pump' | 'loading' | 'to-cistern' | 'unloading' | 'blocked';
 export type TutorialStep =
   | 'place-pump'
   | 'select-pipe'
@@ -92,8 +91,6 @@ export interface BuildingEffects {
 export type PlacementRuleId =
   | 'not-rock'
   | 'not-salt'
-  | 'requires-pump'
-  | 'requires-cistern'
   | 'not-near-building'
   | 'not-on-tree'
   | 'not-on-pipe';
@@ -108,10 +105,11 @@ export interface IrrigationDefinition {
   radius: number;
   amount: number;
   boost?: number;
+  consumptionRate?: number;
 }
 
 export interface WorkerDefinition {
-  role: 'nursery' | 'carrier';
+  role: 'nursery';
   capacity?: number;
   speedCellsPerSecond: number;
 }
@@ -126,7 +124,6 @@ export interface BuildingDefinition {
   description: string;
   unlock: string;
   effects: BuildingEffects;
-  reuseCooldownSeconds?: number;
   capacity?: number;
   storage?: StorageDefinition;
   localIrrigation?: IrrigationDefinition;
@@ -155,8 +152,6 @@ export interface BuildingInstance {
   gx: number;
   gy: number;
   placedAt: number;
-  scanProgress: number;
-  scanComplete: boolean;
   waterStored: number;
 }
 
@@ -231,16 +226,6 @@ export interface NurseryWorker {
   message: string;
 }
 
-export interface CarrierWorker {
-  state: CarrierWorkerState;
-  x: number;
-  y: number;
-  targetCisternId: number | null;
-  waterLoad: number;
-  progress: number;
-  message: string;
-}
-
 export interface FieldSet {
   naturalWater: Float32Array;
   naturalShade: Float32Array;
@@ -263,6 +248,7 @@ export interface GameMetrics {
   waterResource: number;
   waterProduction: number;
   waterConsumption: number;
+  cisternWaterConsumption: number;
   openOutlets: number;
   woodResource: number;
   cisternWater: number;

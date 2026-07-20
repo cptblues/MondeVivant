@@ -1,7 +1,7 @@
 import { TERRAIN_NAMES } from '../config';
 import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_ROBOT_WATER_RADIUS, NURSERY_WATER_FETCH_THRESHOLD, SEED_SEARCH_RADIUS, WORKER_SPEED_CELLS_PER_SECOND } from '../gameConfig';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
-import type { BuildingInstance, CarrierWorker, NurseryWorker, ScanZone, SeedType } from '../types';
+import type { BuildingInstance, NurseryWorker, ScanZone, SeedType } from '../types';
 import type { ScanTarget, SimulationContext, WorkerTarget } from '../simulationContext';
 import { distance } from '../../utils/math';
 
@@ -149,7 +149,7 @@ export function isWorkerTargetQueued(this: SimulationContext, seed: SeedType, in
   return this.plantingZones.some((zone) => zone.active && zone.seed === seed && zone.cells.includes(index));
 }
 
-export function moveWorkerToward(this: SimulationContext, worker: NurseryWorker | CarrierWorker, x: number, y: number, dt: number, speed = WORKER_SPEED_CELLS_PER_SECOND): boolean {
+export function moveWorkerToward(this: SimulationContext, worker: NurseryWorker, x: number, y: number, dt: number, speed = WORKER_SPEED_CELLS_PER_SECOND): boolean {
   const dx = x - worker.x;
   const dy = y - worker.y;
   const d = Math.hypot(dx, dy);

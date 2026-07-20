@@ -45,6 +45,7 @@ export function getMetrics(this: SimulationContext): GameMetrics {
     waterResource: this.waterResource,
     waterProduction: this.getWaterProduction(),
     waterConsumption: this.getWaterConsumption(),
+    cisternWaterConsumption: this.getCisternWaterConsumption(),
     openOutlets: this.pipes.filter((pipe) => pipe.outlet && pipe.outletOpen).length,
     woodResource: this.woodResource,
     cisternWater: this.getCisternWaterStored(),

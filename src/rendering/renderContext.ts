@@ -47,7 +47,6 @@ export interface RendererContext {
   drawBuildingWaterGauge(fill: number): void;
   drawPipeConnectorDot(): void;
   drawNurseryWorker(simulation: GameSimulation): void;
-  drawCarrierWorker(simulation: GameSimulation): void;
   drawRobot(px: number, py: number, accent: string, blocked: boolean, progress: number | null, carryingWater: boolean): void;
   drawPlacementPreview(simulation: GameSimulation, hover: HoverState): void;
   drawEcologyOverlay(simulation: GameSimulation): void;

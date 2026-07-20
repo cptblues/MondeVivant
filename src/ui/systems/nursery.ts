@@ -1,5 +1,5 @@
 import { SCAN_ICON, SEEDS, TERRAIN_NAMES } from '../../core/config';
-import { SEED_SEARCH_DURATION } from '../../core/gameConfig';
+import { CULTIVATION_COST, RESEARCH_COST, SEED_SEARCH_DURATION } from '../../core/gameConfig';
 import { TerrainType } from '../../core/types';
 import type { SeedType } from '../../core/types';
 import { element, type UIContext } from '../uiContext';
@@ -47,7 +47,7 @@ export function renderNursery(this: UIContext): void {
   if (this.nurseryMode === 'cultivation') {
     const defaultSeed = seeds[0];
     const defaultQuota = defaultSeed ? Math.max(10, this.simulation.seedCount(defaultSeed) + 1) : 10;
-    content.innerHTML = `${waterSummary}${this.buildWorkerPanel()}${seedSearchAction}<div class="nursery-copy"><strong>Cultiver jusqu’à un quota</strong><p>Chaque cycle consomme 1 graine et 7 eau de la pépinière. Les cycles se répètent jusqu’au stock demandé.</p></div><div class="quota-row"><label class="field-label">Graine mère<select id="cultureSeed">${seeds.map((seed) => `<option value="${seed}">${SEEDS[seed].name} · ${this.simulation.seedCount(seed)} en stock</option>`).join('')}</select></label><label class="field-label">Quota<input id="cultureQuota" type="number" min="1" max="99" step="1" value="${defaultQuota}"></label></div><button class="nursery-action" id="startCulture" ${seeds.length ? '' : 'disabled'}>Cultiver jusqu’au quota</button>`;
+    content.innerHTML = `${waterSummary}${this.buildWorkerPanel()}${seedSearchAction}<div class="nursery-copy"><strong>Cultiver jusqu’à un quota</strong><p>Chaque cycle consomme 1 graine et ${CULTIVATION_COST} eau de la pépinière. Les cycles se répètent jusqu’au stock demandé.</p></div><div class="quota-row"><label class="field-label">Graine mère<select id="cultureSeed">${seeds.map((seed) => `<option value="${seed}">${SEEDS[seed].name} · ${this.simulation.seedCount(seed)} en stock</option>`).join('')}</select></label><label class="field-label">Quota<input id="cultureQuota" type="number" min="1" max="99" step="1" value="${defaultQuota}"></label></div><button class="nursery-action" id="startCulture" ${seeds.length ? '' : 'disabled'}>Cultiver jusqu’au quota</button>`;
     content.querySelector<HTMLButtonElement>('#startCulture')?.addEventListener('click', () => {
       const seed = (content.querySelector<HTMLSelectElement>('#cultureSeed')?.value ?? 'pioneer') as SeedType;
       const quota = Number(content.querySelector<HTMLInputElement>('#cultureQuota')?.value ?? 10);
@@ -71,7 +71,7 @@ export function renderNursery(this: UIContext): void {
     : pioneerCount <= 0
       ? 'Aucune graine pionnière disponible pour servir de base.'
       : 'Une variété adaptée sera révélée à la fin.';
-  content.innerHTML = `${waterSummary}${this.buildWorkerPanel()}${seedSearchAction}<div class="nursery-copy"><strong>Adapter une graine au sol</strong><p>Consomme 1 graine pionnière et 15 eau de la pépinière.</p></div>${sandInfo}<div class="research-result"><strong>Graine mère : ${SEEDS.pioneer.name}</strong><br>${pioneerCount} en stock</div>${soilSelect}<div class="research-result">${researchMessage}</div><button class="nursery-action" id="startResearch" ${pioneerCount > 0 && soils.length ? '' : 'disabled'}>Lancer la recherche</button>`;
+  content.innerHTML = `${waterSummary}${this.buildWorkerPanel()}${seedSearchAction}<div class="nursery-copy"><strong>Adapter une graine au sol</strong><p>Consomme 1 graine pionnière et ${RESEARCH_COST} eau de la pépinière.</p></div>${sandInfo}<div class="research-result"><strong>Graine mère : ${SEEDS.pioneer.name}</strong><br>${pioneerCount} en stock</div>${soilSelect}<div class="research-result">${researchMessage}</div><button class="nursery-action" id="startResearch" ${pioneerCount > 0 && soils.length ? '' : 'disabled'}>Lancer la recherche</button>`;
   content.querySelector<HTMLButtonElement>('#startResearch')?.addEventListener('click', () => {
     const soil = Number(content.querySelector<HTMLSelectElement>('#researchSoil')?.value) as TerrainType;
     const result = this.simulation.startResearch('pioneer', soil);

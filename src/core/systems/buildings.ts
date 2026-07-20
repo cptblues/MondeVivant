@@ -1,5 +1,13 @@
 import { BUILDINGS, BUILDING_ORDER, SEEDS } from '../config';
-import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, HARVEST_SEED_REWARD, NURSERY_CAPACITY, SCANNER_REUSE_COOLDOWN, WOOD_PER_MATURE_TREE } from '../gameConfig';
+import {
+  CISTERN_CAPACITY,
+  CISTERN_LOCAL_IRRIGATION_CONSUMPTION,
+  CISTERN_SOURCE_MIN_WATER,
+  HARVEST_SEED_REWARD,
+  NURSERY_CAPACITY,
+  PUMP_LOCAL_IRRIGATION_CONSUMPTION,
+  WOOD_PER_MATURE_TREE,
+} from '../gameConfig';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { BuildingInstance, BuildingType, BuildingWaterStatus, PlacementResult } from '../types';
 import type { SimulationContext } from '../simulationContext';
@@ -15,8 +23,6 @@ export function validateBuildingPlacement(this: SimulationContext, type: Buildin
   const cell = this.cells[this.index(gx, gy)];
   if (cell.terrain === TerrainType.Rock) return { ok: false, message: 'La roche bloque la construction' };
   if (type === 'nursery' && cell.terrain === TerrainType.Salt) return { ok: false, message: 'La pépinière ne peut pas être posée sur un sol salin' };
-  if (type === 'carrier' && !this.buildings.some((building) => building.type === 'pump')) return { ok: false, message: 'Le transporteur a besoin d’une pompe existante' };
-  if (type === 'carrier' && !this.buildings.some((building) => building.type === 'cistern')) return { ok: false, message: 'Construisez d’abord une cuve à remplir' };
   if (this.waterResource < definition.cost) return { ok: false, message: `Il faut ${definition.cost} 💧` };
   if (this.woodResource < (definition.woodCost ?? 0)) return { ok: false, message: `Il faut ${definition.woodCost ?? 0} bois` };
   if (this.buildings.some((building) => distance(gx, gy, building.gx, building.gy) < 3)) return { ok: false, message: 'Trop proche d’une autre construction' };
@@ -47,10 +53,6 @@ export function placeBuilding(this: SimulationContext, type: BuildingType, gx: n
   if (type === 'cistern') {
     this.completedTutorialSteps.add('build-cistern');
     this.addLog('La <b>cuve relais</b> peut se remplir depuis un tuyau de pompe relié directement ou par le robot pépiniériste si elle est proche.');
-  }
-  if (type === 'carrier') {
-    this.ensureCarrierWorker(building);
-    this.addLog('Un <b>robot transporteur</b> rejoint l’atelier et cherchera une cuve à remplir.');
   }
   if (type === 'pump') this.completedTutorialSteps.add('place-pump');
   this.toast(`${BUILDINGS[type].name} installée`);
@@ -105,23 +107,15 @@ export function removeSelectedBuilding(this: SimulationContext): boolean {
       this.pipes = this.pipes.filter((pipe) => (pipe.sourceType !== 'cistern' || pipe.sourceId !== building.id) && (pipe.gx !== building.gx || pipe.gy !== building.gy));
       this.addLog(`Les ${pipeCount} cellules de tuyau reliées à la cuve ont aussi été démontées.`);
     }
-    if (this.carrierWorker?.targetCisternId === building.id) this.carrierWorker = null;
   }
   if (building.type === 'nursery') {
     this.nurseryWorker = null;
     if (this.selectedTool?.kind === 'planting-zone') this.selectedTool = null;
     this.addLog('Les zones de plantation restent dessinées mais attendront une nouvelle pépinière.');
   }
-  if (building.type === 'carrier') this.carrierWorker = null;
   this.buildings = this.buildings.filter((candidate) => candidate.id !== building.id);
-  if (building.type === 'scanner') {
-    this.buildingCooldowns.scanner = SCANNER_REUSE_COOLDOWN;
-    this.addLog(`<b>Scanner récupéré.</b> Les sols identifiés restent mémorisés. Réutilisation dans ${SCANNER_REUSE_COOLDOWN} secondes.`);
-    this.toast(`Scanner disponible dans ${SCANNER_REUSE_COOLDOWN} s`);
-  } else {
-    this.addLog(`<b>${BUILDINGS[building.type].name}</b> récupérée et remise dans l’inventaire.`);
-    this.toast('Construction récupérée');
-  }
+  this.addLog(`<b>${BUILDINGS[building.type].name}</b> récupérée et remise dans l’inventaire.`);
+  this.toast('Construction récupérée');
   this.selectedTarget = null;
   this.currentFields = this.computeFields();
   this.notify();
@@ -135,8 +129,6 @@ export function makeBuilding(this: SimulationContext, type: BuildingType, gx: nu
     gx,
     gy,
     placedAt: this.simulationTime,
-    scanProgress: 0,
-    scanComplete: type !== 'scanner',
     waterStored: 0,
   };
 }
@@ -161,7 +153,7 @@ export function getBuildingWaterStatus(this: SimulationContext, building: Buildi
       capacity: this.maxWaterResource,
       fill,
       label: 'Réserve de pompe',
-      detail: `Production +${this.getWaterProduction().toFixed(1)} eau/s · sorties ouvertes ${this.getWaterConsumption().toFixed(1)} eau/s · les cuves pleines ne tirent plus d’eau`,
+      detail: `Production +${this.getWaterProduction().toFixed(1)} eau/s · consommation ${this.getWaterConsumption().toFixed(1)} eau/s, dont ${PUMP_LOCAL_IRRIGATION_CONSUMPTION.toFixed(2)} locale par pompe active`,
     };
   }
   if (building.type === 'cistern') {
@@ -172,8 +164,8 @@ export function getBuildingWaterStatus(this: SimulationContext, building: Buildi
       fill,
       label: 'Réserve de cuve',
       detail: building.waterStored >= CISTERN_SOURCE_MIN_WATER
-        ? 'Assez pleine pour servir de source secondaire.'
-        : `Source secondaire à partir de ${CISTERN_SOURCE_MIN_WATER} eau.`,
+        ? `Source secondaire active · consommation locale ${CISTERN_LOCAL_IRRIGATION_CONSUMPTION.toFixed(2)} eau/s.`
+        : `Source secondaire à partir de ${CISTERN_SOURCE_MIN_WATER} eau · consommation locale ${CISTERN_LOCAL_IRRIGATION_CONSUMPTION.toFixed(2)} eau/s si remplie.`,
     };
   }
   if (building.type === 'nursery') {
@@ -191,7 +183,6 @@ export function getBuildingWaterStatus(this: SimulationContext, building: Buildi
 }
 
 export function getBuildingStatus(this: SimulationContext, building: BuildingInstance): string {
-  if (building.type === 'scanner') return building.scanComplete ? 'Analyse mémorisée — scanner déplaçable' : `Analyse ${Math.round(building.scanProgress * 100)} %`;
   if (building.type === 'pump') return `Source du réseau · ${this.pipes.filter((pipe) => pipe.sourceType === 'pump' && pipe.sourceId === building.id).length} cases reliées`;
   if (building.type === 'nursery') {
     if (!this.nurseryJob) return 'Atelier de graines — robot prêt à planter les zones peintes';
@@ -204,7 +195,6 @@ export function getBuildingStatus(this: SimulationContext, building: BuildingIns
     const sourceLabel = building.waterStored >= CISTERN_SOURCE_MIN_WATER ? 'source disponible' : `source à ${CISTERN_SOURCE_MIN_WATER} 💧`;
     return `${fill}/${CISTERN_CAPACITY} 💧 stockés · ${sourceLabel} · ${pipeCount} cases secondaires`;
   }
-  if (building.type === 'carrier') return this.carrierWorker ? this.carrierWorker.message : 'Robot transporteur en attente de mission';
   return 'Infrastructure active';
 }
 
@@ -251,10 +241,6 @@ export function getNurseryBuilding(this: SimulationContext): BuildingInstance | 
   return this.buildings.find((building) => building.type === 'nursery') ?? null;
 }
 
-export function getCarrierBuilding(this: SimulationContext): BuildingInstance | null {
-  return this.buildings.find((building) => building.type === 'carrier') ?? null;
-}
-
 export function getPumpBuilding(this: SimulationContext): BuildingInstance | null {
   return this.buildings.find((building) => building.type === 'pump') ?? null;
 }
@@ -283,7 +269,6 @@ export const buildingsMethods = {
   hasNursery,
   formatBuildingCost,
   getNurseryBuilding,
-  getCarrierBuilding,
   getPumpBuilding,
   workerHome,
 };

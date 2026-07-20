@@ -58,21 +58,17 @@ export function updateInspector(this: UIContext): void {
       element<HTMLElement>('#buildingWaterDetail').textContent = waterStatus.detail;
     }
     const progressWrap = element<HTMLElement>('#buildingProgressWrap');
-    const progress = building.type === 'scanner' && !building.scanComplete
-      ? building.scanProgress
-      : building.type === 'nursery' && this.simulation.nurseryJob
+    const progress = building.type === 'nursery' && this.simulation.nurseryJob
         ? this.simulation.nurseryJob.progress
         : null;
     progressWrap.hidden = progress === null;
     if (progress !== null) {
       element<HTMLElement>('#buildingProgressValue').textContent = `${Math.round(progress * 100)}%`;
       element<HTMLElement>('#buildingProgressBar').style.width = `${progress * 100}%`;
-      element<HTMLElement>('#buildingProgressLabel').textContent = building.type === 'scanner'
-        ? 'Analyse du sol'
-        : this.simulation.nurseryJob?.pausedReason ? 'Travail en pause' : 'Travail en cours';
+      element<HTMLElement>('#buildingProgressLabel').textContent = this.simulation.nurseryJob?.pausedReason ? 'Travail en pause' : 'Travail en cours';
     }
     removeButton.disabled = building.type === 'nursery' && Boolean(this.simulation.nurseryJob);
-    removeButton.textContent = building.type === 'scanner' ? 'Récupérer le scanner · 30 s' : 'Récupérer la construction';
+    removeButton.textContent = 'Récupérer la construction';
     if ((building.type === 'pump' || building.type === 'cistern') && this.simulation.pipes.some((candidate) => candidate.sourceType === building.type && candidate.sourceId === building.id)) {
       clearNetworkButton.hidden = false;
       clearNetworkButton.textContent = building.type === 'cistern' ? 'Démonter le réseau secondaire' : 'Démonter le réseau';
@@ -148,9 +144,7 @@ export function updateInspector(this: UIContext): void {
 export function buildingSubtitle(this: UIContext, type: BuildingType): string {
   if (type === 'pump') return 'Source de réserve, réseau et humidité locale';
   if (type === 'cistern') return 'Stockage d’eau, humidité locale et source secondaire';
-  if (type === 'carrier') return 'Atelier de robot transporteur';
-  if (type === 'nursery') return 'Atelier de graines et robot planteur';
-  return BUILDINGS[type].radiusCells > 0 ? 'Construction sélectionnée · rayon affiché' : 'Atelier sans zone d’effet';
+  return 'Atelier de graines et robot planteur';
 }
 
 export function renderGrowthDiagnostic(this: UIContext, index: number): void {
@@ -166,8 +160,7 @@ export function renderGrowthDiagnostic(this: UIContext, index: number): void {
 }
 
 export function outletConsumption(this: UIContext, level: PressureLevel, open: boolean): number {
-  if (!open) return 0;
-  return level === 'strong' ? 1.15 : level === 'medium' ? 0.72 : level === 'weak' ? 0.32 : 0;
+  return this.simulation.getOutletConsumptionForLevel(level, open);
 }
 
 export const inspectorUiMethods = {

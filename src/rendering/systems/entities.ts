@@ -127,10 +127,6 @@ export function drawBuilding(this: RendererContext, simulation: GameSimulation, 
   this.roundedRect(-14, -16, 28, 28, 8); ctx.fill(); ctx.stroke();
   ctx.font = '18px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(definition.icon, 0, -1);
-  if (building.type === 'scanner' && !building.scanComplete) {
-    ctx.strokeStyle = 'rgba(73, 154, 122, .72)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(0, -1, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * building.scanProgress); ctx.stroke();
-  }
   if (building.type === 'nursery' && simulation.nurseryJob) {
     ctx.fillStyle = '#2d6f4a'; ctx.fillRect(-13, 17, 26, 3.5);
     ctx.fillStyle = '#8dc16c'; ctx.fillRect(-13, 17, 26 * simulation.nurseryJob.progress, 3.5);
@@ -236,32 +232,6 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
   this.drawRobot(px, py, accent, worker.state === 'blocked', progress, worker.waterLoad > 0.1);
 }
 
-export function drawCarrierWorker(this: RendererContext, simulation: GameSimulation): void {
-  const worker = simulation.carrierWorker;
-  if (!worker) return;
-  const ctx = this.context;
-  const px = worker.x * CELL_SIZE;
-  const py = worker.y * CELL_SIZE;
-  const pump = simulation.buildings.find((building) => building.type === 'pump');
-  const cistern = worker.targetCisternId ? simulation.buildings.find((building) => building.id === worker.targetCisternId && building.type === 'cistern') : null;
-  const target = worker.state === 'to-pump' || worker.state === 'loading' ? pump : cistern;
-  if (target) {
-    const tx = (target.gx + 0.5) * CELL_SIZE;
-    const ty = (target.gy + 0.5) * CELL_SIZE;
-    ctx.save();
-    ctx.strokeStyle = 'rgba(54, 119, 168, .42)';
-    ctx.lineWidth = 1.4;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-    ctx.lineTo(tx, ty);
-    ctx.stroke();
-    ctx.restore();
-  }
-  const progress = worker.state === 'loading' || worker.state === 'unloading' ? worker.progress : null;
-  this.drawRobot(px, py, '#3177a8', worker.state === 'blocked', progress, worker.waterLoad > 0.1);
-}
-
 export function drawRobot(this: RendererContext, px: number, py: number, accent: string, blocked: boolean, progress: number | null, carryingWater: boolean): void {
   const ctx = this.context;
   ctx.save();
@@ -347,6 +317,5 @@ export const entitiesRenderMethods = {
   drawBuildingWaterGauge,
   drawPipeConnectorDot,
   drawNurseryWorker,
-  drawCarrierWorker,
   drawRobot,
 };

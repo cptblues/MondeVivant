@@ -1,7 +1,7 @@
 import { RESEARCH_SEED_FOR_SOIL, SEED_ORDER, SEEDS, TERRAIN_NAMES } from '../config';
 import { CULTIVATION_COST, CULTIVATION_DURATION, CULTIVATION_YIELD, RESEARCH_COST, RESEARCH_DURATION, SCAN_ZONE_BASE_DURATION, SCAN_ZONE_MAX_DURATION, SCAN_ZONE_MIN_DURATION, SCAN_ZONE_RADIUS, SCAN_ZONE_TILE_DURATION } from '../gameConfig';
 import { GRID_WIDTH, TerrainType } from '../types';
-import type { BuildingInstance, NurseryJob, PlacementResult, PlantingZone, PlantingZoneCellState, PlantingZoneSummary, ScanZoneSummary, SeedType } from '../types';
+import type { NurseryJob, PlacementResult, PlantingZone, PlantingZoneCellState, PlantingZoneSummary, ScanZoneSummary, SeedType } from '../types';
 import type { SimulationContext } from '../simulationContext';
 import { clamp } from '../../utils/math';
 
@@ -246,26 +246,6 @@ export function clearPlantingZone(this: SimulationContext, id: number): boolean 
   return true;
 }
 
-export function completeScan(this: SimulationContext, building: BuildingInstance): void {
-  building.scanComplete = true;
-  this.completedTutorialSteps.add('scan-soil');
-  const found = new Set<TerrainType>();
-  for (const index of this.getAffectedCells('scanner', building.gx, building.gy)) {
-    const cell = this.cells[index];
-    if (cell.terrain !== TerrainType.Rock) {
-      cell.known = true;
-      cell.revealed = true;
-      found.add(cell.terrain);
-      this.discoveredSoils.add(cell.terrain);
-    }
-  }
-  const names = [...found].map((soil) => TERRAIN_NAMES[soil]).join(', ');
-  this.addLog(`Analyse terminée et mémorisée : ${names || 'aucun sol cultivable'}.`);
-  this.toast('Analyse du sol mémorisée');
-  this.wakeNurseryWorker();
-  this.notify();
-}
-
 export function advanceNurseryJob(this: SimulationContext, dt: number): void {
   const job = this.nurseryJob;
   if (!job) return;
@@ -446,7 +426,6 @@ export const nurseryMethods = {
   getPlantingZoneAt,
   togglePlantingZone,
   clearPlantingZone,
-  completeScan,
   advanceNurseryJob,
   tryStartNurseryCycle,
   pauseNurseryJob,

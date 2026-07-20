@@ -1,5 +1,5 @@
 import { BUILDING_ORDER } from '../config';
-import { SCAN_DURATION, SCAN_ZONE_RADIUS } from '../gameConfig';
+import { SCAN_ZONE_RADIUS } from '../gameConfig';
 import { createBuildingCooldowns, createBuildingTotals, createInitialCells, createSeedInventory } from '../state';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { BuildingType, PlacementResult, PlacementTool, SeedType } from '../types';
@@ -21,7 +21,6 @@ export function reset(this: SimulationContext): void {
   this.plantingZones = [];
   this.scanZones = [];
   this.nurseryWorker = null;
-  this.carrierWorker = null;
   this.nextBuildingId = 1;
   this.nextPlantingZoneId = 1;
   this.nextScanZoneId = 1;
@@ -107,18 +106,12 @@ export function update(this: SimulationContext, deltaSeconds: number): void {
     this.buildingCooldowns[type] = Math.max(0, this.buildingCooldowns[type] - dt);
   }
 
-  for (const building of this.buildings) {
-    if (building.type !== 'scanner' || building.scanComplete) continue;
-    building.scanProgress = Math.min(1, building.scanProgress + dt / SCAN_DURATION);
-    if (building.scanProgress >= 1) this.completeScan(building);
-  }
-
   const production = this.getWaterProduction();
-  const consumption = this.getWaterConsumption();
-  this.waterResource = clamp(this.waterResource + (production - consumption) * dt, 0, this.maxWaterResource);
+  this.waterResource = clamp(this.waterResource + production * dt, 0, this.maxWaterResource);
+  this.waterResource = clamp(this.waterResource - this.getWaterConsumption() * dt, 0, this.maxWaterResource);
   this.drainCisternOutlets(dt);
   this.updateBuildingsFromPipes(dt);
-  this.updateCarrierWorker(dt);
+  this.drainLocalIrrigation(dt);
   this.advanceNurseryJob(dt);
 
   const fields = this.computeFields();
