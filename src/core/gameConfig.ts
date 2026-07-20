@@ -102,6 +102,11 @@ export const NURSERY_WATER_FETCH_THRESHOLD = 7;
 export const NURSERY_ROBOT_WATER_RADIUS = 12;
 export const SEED_SEARCH_DURATION = 15;
 export const SEED_SEARCH_RADIUS = 7;
+export const ROBOT_TASK_PRIORITIES = {
+  waterDelivery: 90,
+  scan: 60,
+  plant: 40,
+} as const;
 
 export const GAME_CONFIG = {
   simulation: { step: SIMULATION_STEP },
@@ -109,6 +114,6 @@ export const GAME_CONFIG = {
   nursery: { cost: NURSERY_COST, capacity: NURSERY_CAPACITY, cultivationDuration: CULTIVATION_DURATION, cultivationCost: CULTIVATION_COST, cultivationYield: CULTIVATION_YIELD, researchDuration: RESEARCH_DURATION, researchCost: RESEARCH_COST },
   pipes: { maxLength: PIPE_MAX_LENGTH, cisternMaxLength: CISTERN_PIPE_MAX_LENGTH, neighbors: PIPE_NEIGHBORS, outletIrrigation: OUTLET_IRRIGATION, outletConsumption: OUTLET_CONSUMPTION, cisternFillRate: CISTERN_PIPE_FILL_RATE, nurseryFillRate: NURSERY_PIPE_FILL_RATE, pressureThresholds: PRESSURE_THRESHOLDS },
   irrigation: { pumpRadius: PUMP_IRRIGATION_RADIUS, pumpAmount: PUMP_IRRIGATION_AMOUNT, pumpConsumption: PUMP_LOCAL_IRRIGATION_CONSUMPTION, cisternRadius: CISTERN_IRRIGATION_RADIUS, cisternAmount: CISTERN_IRRIGATION_AMOUNT, cisternConsumption: CISTERN_LOCAL_IRRIGATION_CONSUMPTION },
-  workers: { nurserySpeed: WORKER_SPEED_CELLS_PER_SECOND, nurseryCapacity: NURSERY_WORKER_CAPACITY, nurseryWaterRadius: NURSERY_ROBOT_WATER_RADIUS, transferDuration: WORKER_TRANSFER_DURATION },
+  workers: { nurserySpeed: WORKER_SPEED_CELLS_PER_SECOND, nurseryCapacity: NURSERY_WORKER_CAPACITY, nurseryWaterRadius: NURSERY_ROBOT_WATER_RADIUS, transferDuration: WORKER_TRANSFER_DURATION, taskPriorities: ROBOT_TASK_PRIORITIES },
   ecology: { groundCover: GROUND_COVER, maxSeedsPerTree: MAX_SEEDS_PER_TREE, woodPerMatureTree: WOOD_PER_MATURE_TREE },
 } as const;

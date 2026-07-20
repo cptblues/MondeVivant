@@ -9,6 +9,7 @@ import {
   PUMP_WATER_RATE,
   RESEARCH_COST,
   RESEARCH_DURATION,
+  ROBOT_TASK_PRIORITIES,
   SIMULATION_STEP,
 } from './gameConfig';
 import { GameSimulation } from './GameSimulation';
@@ -93,6 +94,9 @@ describe('robot scan', () => {
     const created = simulation.createScanZone(center.x, center.y);
     expect(created.ok, created.message).toBe(true);
     const zone = simulation.scanZones[0];
+    const task = simulation.getTaskForScanZone(zone.id);
+    expect(task?.type).toBe('scan');
+    expect(task?.state).toBe('available');
     expect(zone.cells).toHaveLength(unknownCells.length);
     expect(zone.duration).toBeCloseTo(simulation.getScanZoneDuration(unknownCells.length));
 
@@ -101,6 +105,98 @@ describe('robot scan', () => {
     expect(simulation.scanZones).toHaveLength(0);
     expect(unknownCells.every((index) => simulation.cells[index].known)).toBe(true);
     expect(simulation.getDiscoveredSoils().length).toBeGreaterThan(0);
+    expect(simulation.getRobotTask(task?.id)?.state).toBe('completed');
+  });
+});
+
+describe('robot tasks', () => {
+  it('prevents two robots from reserving the same task', () => {
+    const simulation = preparePumpAndNursery();
+    const created = simulation.createScanZone(24, 25);
+    expect(created.ok, created.message).toBe(true);
+    const task = simulation.tasks.find((candidate) => candidate.type === 'scan');
+    expect(task).toBeDefined();
+
+    expect(simulation.reserveTask(task!.id, 'nursery-1')?.reservedByWorkerId).toBe('nursery-1');
+    expect(simulation.reserveTask(task!.id, 'nursery-2')).toBeNull();
+  });
+
+  it('selects by priority before distance', () => {
+    const simulation = preparePumpAndNursery();
+    const nursery = simulation.getNurseryBuilding()!;
+    const cistern = simulation.makeBuilding('cistern', nursery.gx + 10, nursery.gy);
+    cistern.waterStored = 0;
+    simulation.buildings.push(cistern);
+    const scan = simulation.createScanZone(nursery.gx + 1, nursery.gy);
+    expect(scan.ok, scan.message).toBe(true);
+    simulation.syncRobotTasks();
+
+    const worker = simulation.ensureNurseryWorker(nursery);
+    const selected = simulation.selectNextTask(worker);
+    expect(selected?.type).toBe('water-delivery');
+    expect(selected?.priority).toBe(ROBOT_TASK_PRIORITIES.waterDelivery);
+  });
+
+  it('selects the closest task when priorities are equal', () => {
+    const simulation = preparePumpAndNursery();
+    const nursery = simulation.getNurseryBuilding()!;
+    const near = simulation.createScanZone(nursery.gx + 4, nursery.gy);
+    const far = simulation.createScanZone(nursery.gx + 18, nursery.gy);
+    expect(near.ok, near.message).toBe(true);
+    expect(far.ok, far.message).toBe(true);
+    simulation.syncRobotTasks();
+
+    const worker = simulation.ensureNurseryWorker(nursery);
+    const selected = simulation.selectNextTask(worker);
+    expect(selected?.id).toBe(`scan:${simulation.scanZones[0].id}`);
+  });
+
+  it('keeps blocked planting tasks with a readable reason', () => {
+    const simulation = preparePumpAndNursery();
+    simulation.selectTool({ kind: 'planting-zone', mode: 'paint', seed: 'pioneer' });
+    const painted = simulation.placeSelected(30, 25);
+    expect(painted.ok, painted.message).toBe(true);
+    simulation.syncRobotTasks();
+
+    const task = simulation.tasks.find((candidate) => candidate.type === 'plant');
+    expect(task?.state).toBe('blocked');
+    expect(task?.blockedReason).toBe('Scannez d’abord ce sol');
+    expect(simulation.getPlantingZoneSummaries()[0].blockedReason).toBe('Scannez d’abord ce sol');
+  });
+
+  it('executes planting through a reserved task', () => {
+    const simulation = preparePumpAndNursery();
+    const index = simulation.index(16, 25);
+    simulation.cells[index].known = true;
+    simulation.cells[index].revealed = true;
+    simulation.currentFields = simulation.computeFields();
+    simulation.selectTool({ kind: 'planting-zone', mode: 'paint', seed: 'pioneer' });
+    const painted = simulation.placeSelected(16, 25);
+    expect(painted.ok, painted.message).toBe(true);
+    const task = simulation.tasks.find((candidate) => candidate.type === 'plant');
+    expect(task?.state).toBe('available');
+
+    advance(simulation, 6);
+
+    expect(simulation.cells[index].tree).toBe('pioneer');
+    expect(simulation.getRobotTask(task?.id)?.state).toBe('completed');
+  });
+
+  it('executes water transport through a water-delivery task', () => {
+    const simulation = preparePumpAndNursery();
+    const nursery = simulation.getNurseryBuilding()!;
+    const cistern = simulation.makeBuilding('cistern', nursery.gx + 4, nursery.gy);
+    cistern.waterStored = 0;
+    simulation.buildings.push(cistern);
+    simulation.syncRobotTasks();
+
+    const task = simulation.tasks.find((candidate) => candidate.type === 'water-delivery' && candidate.target.kind === 'building' && candidate.target.buildingId === cistern.id);
+    expect(task?.state).toBe('available');
+
+    advance(simulation, 7);
+
+    expect(cistern.waterStored).toBeGreaterThan(0);
+    expect(simulation.tasks.some((candidate) => candidate.id === task?.id)).toBe(true);
   });
 });
 

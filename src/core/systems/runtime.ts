@@ -20,6 +20,7 @@ export function reset(this: SimulationContext): void {
   this.nurseryJob = null;
   this.plantingZones = [];
   this.scanZones = [];
+  this.tasks = [];
   this.nurseryWorker = null;
   this.nextBuildingId = 1;
   this.nextPlantingZoneId = 1;
@@ -93,6 +94,7 @@ export function loadDemo(this: SimulationContext): void {
   this.selectedTool = null;
   this.currentFields = this.computeFields();
   this.syncTutorialProgress();
+  this.syncRobotTasks();
   this.addLog('Démo chargée : une sortie est ouverte, une seconde attend d’être activée.');
   this.toast('Démo avancée chargée');
   this.notify();
@@ -130,6 +132,7 @@ export function update(this: SimulationContext, deltaSeconds: number): void {
     this.updateGroundCover(cell, fields.growthBoost[i], dt);
     this.updateTree(i, fields.growthBoost[i], dt);
   }
+  this.syncRobotTasks();
   this.updateNurseryWorker(dt);
   this.checkMilestones();
 }

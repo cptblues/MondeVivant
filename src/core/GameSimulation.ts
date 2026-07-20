@@ -12,6 +12,7 @@ import type {
   PipeSource,
   PlantingZone,
   PlacementTool,
+  RobotTask,
   ScanZone,
   SeedType,
   SelectedTarget,
@@ -35,6 +36,7 @@ export class GameSimulation {
   public nurseryJob: NurseryJob | null = null;
   public plantingZones: PlantingZone[] = [];
   public scanZones: ScanZone[] = [];
+  public tasks: RobotTask[] = [];
   public nurseryWorker: NurseryWorker | null = null;
   public logs: string[] = [];
 

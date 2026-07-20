@@ -19,6 +19,9 @@ export type BuildingType = 'pump' | 'nursery' | 'cistern';
 export type SeedType = 'pioneer' | 'willow' | 'juniper' | 'tamarisk';
 export type PressureLevel = 'strong' | 'medium' | 'weak' | 'none';
 export type PipeSourceType = 'pump' | 'cistern';
+export type RobotRole = 'nursery';
+export type RobotTaskType = 'scan' | 'plant' | 'water-delivery';
+export type RobotTaskState = 'available' | 'reserved' | 'in-progress' | 'blocked' | 'completed' | 'cancelled';
 export interface PipeSource {
   type: PipeSourceType;
   id: number;
@@ -193,6 +196,7 @@ export interface PlantingZoneSummary {
   readyCells: number;
   plantedCells: number;
   blockedCells: number;
+  blockedReason?: string;
 }
 
 export interface ScanZone {
@@ -211,12 +215,16 @@ export interface ScanZoneSummary {
   totalCells: number;
   progress: number;
   duration: number;
+  blockedReason?: string;
 }
 
 export interface NurseryWorker {
+  id: string;
+  role: RobotRole;
   state: NurseryWorkerState;
   x: number;
   y: number;
+  currentTaskId: string | null;
   targetIndex: number | null;
   targetSeed: SeedType | null;
   targetScanZoneId: number | null;
@@ -224,6 +232,32 @@ export interface NurseryWorker {
   waterLoad: number;
   progress: number;
   message: string;
+}
+
+export type RobotTaskTarget =
+  | { kind: 'cell'; index: number; gx: number; gy: number }
+  | { kind: 'zone'; gx: number; gy: number }
+  | { kind: 'building'; buildingId: number; gx: number; gy: number };
+
+export interface RobotTaskResources {
+  water?: number;
+  seeds?: Partial<Record<SeedType, number>>;
+}
+
+export interface RobotTask {
+  id: string;
+  type: RobotTaskType;
+  target: RobotTaskTarget;
+  zoneId?: number;
+  seed?: SeedType;
+  priority: number;
+  state: RobotTaskState;
+  requiredResources: RobotTaskResources;
+  allowedRoles: RobotRole[];
+  reservedByWorkerId: string | null;
+  blockedReason: string | null;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface FieldSet {

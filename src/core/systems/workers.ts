@@ -1,13 +1,69 @@
 import { SEEDS } from '../config';
 import { CISTERN_CAPACITY, CISTERN_SOURCE_MIN_WATER, NURSERY_CAPACITY, NURSERY_WORKER_CAPACITY, SEED_SEARCH_DURATION, WORKER_PLANT_DURATION, WORKER_TRANSFER_DURATION } from '../gameConfig';
 import { GRID_WIDTH } from '../types';
-import type { BuildingInstance, NurseryWorker } from '../types';
+import type { BuildingInstance, NurseryWorker, RobotTask } from '../types';
 import type { SimulationContext } from '../simulationContext';
 
 function getNurseryWaterDeliveryTarget(simulation: SimulationContext, worker: NurseryWorker): BuildingInstance | null {
-  if (worker.targetBuildingId === null) return null;
-  const target = simulation.buildings.find((building) => building.id === worker.targetBuildingId);
+  const task = simulation.getRobotTask(worker.currentTaskId);
+  const targetId = task?.type === 'water-delivery' && task.target.kind === 'building'
+    ? task.target.buildingId
+    : worker.targetBuildingId;
+  if (targetId === null || targetId === undefined) return null;
+  const target = simulation.buildings.find((building) => building.id === targetId);
   return target?.type === 'nursery' || target?.type === 'cistern' ? target : null;
+}
+
+function clearWorkerTargets(worker: NurseryWorker): void {
+  worker.targetIndex = null;
+  worker.targetSeed = null;
+  worker.targetScanZoneId = null;
+  worker.targetBuildingId = null;
+}
+
+function assignTask(simulation: SimulationContext, worker: NurseryWorker, task: RobotTask): boolean {
+  const reserved = simulation.reserveTask(task.id, worker.id);
+  if (!reserved) return false;
+  worker.currentTaskId = reserved.id;
+  clearWorkerTargets(worker);
+  worker.waterLoad = 0;
+  worker.progress = 0;
+  if (reserved.type === 'water-delivery' && reserved.target.kind === 'building') {
+    const targetInfo = reserved.target;
+    const target = simulation.buildings.find((building) => building.id === targetInfo.buildingId);
+    if (!target) {
+      simulation.blockTask(reserved.id, 'Bâtiment à ravitailler introuvable');
+      worker.currentTaskId = null;
+      return false;
+    }
+    worker.state = 'to-pump';
+    worker.targetBuildingId = target.id;
+    worker.message = target.type === 'cistern' ? 'Va chercher de l’eau pour une cuve proche' : 'Va chercher de l’eau pour la pépinière';
+    return true;
+  }
+  if (reserved.type === 'scan' && reserved.zoneId !== undefined) {
+    const zone = simulation.scanZones.find((candidate) => candidate.id === reserved.zoneId);
+    if (!zone) {
+      simulation.cancelTask(reserved.id, 'Zone de scan retirée');
+      worker.currentTaskId = null;
+      return false;
+    }
+    worker.state = 'to-scan';
+    worker.targetIndex = simulation.index(zone.gx, zone.gy);
+    worker.targetScanZoneId = zone.id;
+    worker.message = 'Vers une zone à analyser';
+    return true;
+  }
+  if (reserved.type === 'plant' && reserved.target.kind === 'cell' && reserved.seed) {
+    worker.state = 'to-target';
+    worker.targetIndex = reserved.target.index;
+    worker.targetSeed = reserved.seed;
+    worker.message = `Vers une zone ${SEEDS[reserved.seed].name}`;
+    return true;
+  }
+  simulation.blockTask(reserved.id, 'Tâche robot incomplète');
+  worker.currentTaskId = null;
+  return false;
 }
 
 export function updateNurseryWorker(this: SimulationContext, dt: number): void {
@@ -24,36 +80,38 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
       worker.progress += dt;
       if (worker.progress < 1.5) return;
     }
-    const waterTarget = this.findNurseryWaterTarget(nursery);
-    if (waterTarget) {
-      const pump = this.getPumpBuilding();
-      if (!pump) {
-        this.setNurseryWorkerBlocked(worker, 'Aucune pompe pour ravitailler les bâtiments proches');
-        return;
-      }
-      if (this.waterResource <= 0.25) {
-        this.setNurseryWorkerBlocked(worker, 'Réserve de pompe trop basse pour ravitailler');
-        return;
-      }
-      worker.state = 'to-pump';
-      worker.targetIndex = null;
-      worker.targetSeed = null;
-      worker.targetScanZoneId = null;
-      worker.targetBuildingId = waterTarget.id;
-      worker.waterLoad = 0;
+    worker.state = 'idle';
+    const task = this.selectNextTask(worker);
+    if (!task || !assignTask(this, worker, task)) {
+      const message = this.getWorkerIdleMessage();
+      worker.state = 'blocked';
+      worker.currentTaskId = null;
+      clearWorkerTargets(worker);
       worker.progress = 0;
-      worker.message = waterTarget.type === 'cistern' ? 'Va chercher de l’eau pour une cuve proche' : 'Va chercher de l’eau pour la pépinière';
+      worker.message = message;
       this.notify();
+      return;
     }
+    this.notify();
+    return;
   }
 
   if (worker.state === 'to-pump') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'water-delivery' || task.state === 'cancelled' || task.state === 'blocked') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = task?.blockedReason ?? 'Tâche de ravitaillement modifiée';
+      this.notify();
+      return;
+    }
     const pump = this.getPumpBuilding();
     if (!pump) {
       this.setNurseryWorkerBlocked(worker, 'Aucune pompe pour ravitailler les bâtiments proches');
       return;
     }
     if (!getNurseryWaterDeliveryTarget(this, worker)) {
+      this.cancelTask(task.id, 'Cible de ravitaillement modifiée');
       worker.state = 'returning';
       worker.progress = 0;
       worker.message = 'Cible de ravitaillement modifiée';
@@ -61,6 +119,10 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
       return;
     }
     if (this.moveWorkerToward(worker, pump.gx + 0.5, pump.gy + 0.5, dt)) {
+      if (!this.startTask(task.id, worker.id)) {
+        this.setNurseryWorkerBlocked(worker, this.getRobotTask(task.id)?.blockedReason ?? 'Ravitaillement impossible');
+        return;
+      }
       worker.state = 'loading-water';
       worker.progress = 0;
       worker.message = 'Charge une réserve portable';
@@ -70,10 +132,19 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'loading-water') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'water-delivery' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = 'Tâche de ravitaillement modifiée';
+      this.notify();
+      return;
+    }
     worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
     if (worker.progress < 1) return;
     const target = getNurseryWaterDeliveryTarget(this, worker);
     if (!target) {
+      this.cancelTask(task.id, 'Cible de ravitaillement modifiée');
       worker.state = 'returning';
       worker.progress = 0;
       worker.message = 'Cible de ravitaillement modifiée';
@@ -99,8 +170,23 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'to-nursery') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'water-delivery' || task.state === 'cancelled' || task.state === 'blocked') {
+      if (worker.waterLoad > 0) {
+        this.waterResource = Math.min(this.maxWaterResource, this.waterResource + worker.waterLoad);
+        worker.waterLoad = 0;
+      }
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = task?.blockedReason ?? 'Tâche de ravitaillement modifiée';
+      this.notify();
+      return;
+    }
     const target = getNurseryWaterDeliveryTarget(this, worker);
     if (!target) {
+      if (worker.currentTaskId) this.cancelTask(worker.currentTaskId, 'Cible de ravitaillement modifiée');
+      this.waterResource = Math.min(this.maxWaterResource, this.waterResource + worker.waterLoad);
+      worker.waterLoad = 0;
       worker.state = 'returning';
       worker.progress = 0;
       worker.message = 'Cible de ravitaillement modifiée';
@@ -117,6 +203,14 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'unloading-water') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'water-delivery') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = 'Tâche de ravitaillement modifiée';
+      this.notify();
+      return;
+    }
     worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
     if (worker.progress < 1) return;
     const target = getNurseryWaterDeliveryTarget(this, worker);
@@ -133,6 +227,8 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
     }
     worker.waterLoad = 0;
     worker.targetBuildingId = null;
+    this.completeTask(task.id);
+    worker.currentTaskId = null;
     worker.state = 'idle';
     worker.progress = 0;
     worker.message = target?.type === 'cistern' ? 'Cuve proche ravitaillée' : 'Réserve de pépinière ravitaillée';
@@ -142,7 +238,9 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'to-scan') {
-    if (worker.targetIndex === null || worker.targetScanZoneId === null || !this.isScanTargetQueued(worker.targetScanZoneId)) {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'scan' || task.state === 'cancelled' || task.state === 'blocked' || worker.targetIndex === null || worker.targetScanZoneId === null || !this.isScanTargetQueued(worker.targetScanZoneId)) {
+      if (task?.id) this.cancelTask(task.id, task.blockedReason ?? 'Zone de scan modifiée');
       worker.state = 'returning';
       worker.progress = 0;
       worker.message = 'Zone de scan modifiée';
@@ -152,6 +250,10 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
     const targetX = (worker.targetIndex % GRID_WIDTH) + 0.5;
     const targetY = Math.floor(worker.targetIndex / GRID_WIDTH) + 0.5;
     if (this.moveWorkerToward(worker, targetX, targetY, dt)) {
+      if (!this.startTask(task.id, worker.id)) {
+        this.setNurseryWorkerBlocked(worker, this.getRobotTask(task.id)?.blockedReason ?? 'Scan impossible');
+        return;
+      }
       worker.state = 'scanning';
       worker.progress = 0;
       worker.message = 'Analyse globale de la zone';
@@ -161,7 +263,9 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'scanning') {
-    if (worker.targetScanZoneId === null || !this.isScanTargetQueued(worker.targetScanZoneId)) {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'scan' || worker.targetScanZoneId === null || !this.isScanTargetQueued(worker.targetScanZoneId)) {
+      if (task?.id) this.cancelTask(task.id, task.blockedReason ?? 'Zone de scan modifiée');
       worker.state = 'returning';
       worker.targetIndex = null;
       worker.targetScanZoneId = null;
@@ -176,10 +280,12 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
       worker.progress = Math.min(1, zone.progress / zone.duration);
       if (worker.progress < 1) return;
     }
+    this.completeTask(task.id);
     worker.state = 'idle';
     worker.targetIndex = null;
     worker.targetScanZoneId = null;
     worker.targetBuildingId = null;
+    worker.currentTaskId = null;
     worker.progress = 0;
     worker.message = 'Zone de sols mémorisée';
     this.notify();
@@ -219,6 +325,7 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
     if (this.moveWorkerToward(worker, home.x, home.y, dt)) {
       this.seedInventory.pioneer += 1;
       worker.state = 'idle';
+      worker.currentTaskId = null;
       worker.targetSeed = null;
       worker.targetScanZoneId = null;
       worker.targetBuildingId = null;
@@ -231,51 +338,16 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
     return;
   }
 
-  if (worker.state === 'idle' || worker.state === 'blocked') {
-    const scanTarget = this.findNextScanTarget(worker);
-    if (scanTarget) {
-      worker.state = 'to-scan';
-      worker.targetIndex = scanTarget.index;
-      worker.targetSeed = null;
-      worker.targetScanZoneId = scanTarget.zoneId;
-      worker.targetBuildingId = null;
-      worker.progress = 0;
-      worker.message = 'Vers une zone à analyser';
-      this.notify();
-      return;
-    }
-    const target = this.findNextWorkerTarget(worker);
-    if (!target) {
-      const message = this.getWorkerIdleMessage();
-      if (worker.state !== 'blocked' || worker.message !== message) {
-        worker.state = 'blocked';
-        worker.targetIndex = null;
-        worker.targetSeed = null;
-        worker.targetScanZoneId = null;
-        worker.targetBuildingId = null;
-        worker.progress = 0;
-        worker.message = message;
-        this.notify();
-      }
-      return;
-    }
-    worker.state = 'to-target';
-    worker.targetIndex = target.index;
-    worker.targetSeed = target.seed;
-    worker.targetScanZoneId = null;
-    worker.targetBuildingId = null;
-    worker.progress = 0;
-    worker.message = `Vers une zone ${SEEDS[target.seed].name}`;
-    this.notify();
-  }
-
   if (worker.state === 'to-target') {
-    if (worker.targetIndex === null || worker.targetSeed === null) {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'plant' || task.state === 'cancelled' || task.state === 'blocked' || worker.targetIndex === null || worker.targetSeed === null) {
+      if (task?.id) this.cancelTask(task.id, task.blockedReason ?? 'Zone de plantation modifiée');
       worker.state = 'returning';
       worker.message = 'Retour à la pépinière';
       return;
     }
     if (!this.isWorkerTargetQueued(worker.targetSeed, worker.targetIndex)) {
+      this.cancelTask(task.id, 'Zone modifiée, retour à la pépinière');
       worker.state = 'returning';
       worker.progress = 0;
       worker.message = 'Zone modifiée, retour à la pépinière';
@@ -285,6 +357,10 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
     const targetX = (worker.targetIndex % GRID_WIDTH) + 0.5;
     const targetY = Math.floor(worker.targetIndex / GRID_WIDTH) + 0.5;
     if (this.moveWorkerToward(worker, targetX, targetY, dt)) {
+      if (!this.startTask(task.id, worker.id)) {
+        this.setNurseryWorkerBlocked(worker, this.getRobotTask(task.id)?.blockedReason ?? 'Plantation impossible');
+        return;
+      }
       worker.state = 'planting';
       worker.progress = 0;
       worker.message = `Plantation de ${SEEDS[worker.targetSeed].name}`;
@@ -294,6 +370,14 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   }
 
   if (worker.state === 'planting') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'plant' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = 'Tâche de plantation modifiée';
+      this.notify();
+      return;
+    }
     worker.progress = Math.min(1, worker.progress + dt / WORKER_PLANT_DURATION);
     if (worker.progress < 1) return;
     if (worker.targetIndex !== null && worker.targetSeed !== null) {
@@ -302,8 +386,13 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
       if (this.isWorkerTargetQueued(worker.targetSeed, worker.targetIndex)) {
         const result = this.plantSeedAt(worker.targetSeed, gx, gy, 'worker');
         if (!result.ok) {
+          this.blockTask(task.id, result.message);
           this.addLog(`Le robot pépiniériste suspend une plantation : ${result.message}.`);
+        } else {
+          this.completeTask(task.id);
         }
+      } else {
+        this.cancelTask(task.id, 'Zone de plantation modifiée');
       }
     }
     worker.state = 'returning';
@@ -316,6 +405,7 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   if (worker.state === 'returning') {
     if (this.moveWorkerToward(worker, home.x, home.y, dt)) {
       worker.state = 'idle';
+      worker.currentTaskId = null;
       worker.targetIndex = null;
       worker.targetSeed = null;
       worker.targetScanZoneId = null;
@@ -331,9 +421,12 @@ export function ensureNurseryWorker(this: SimulationContext, nursery: BuildingIn
   if (!this.nurseryWorker) {
     const home = this.workerHome(nursery);
     this.nurseryWorker = {
+      id: 'nursery-1',
+      role: 'nursery',
       state: 'idle',
       x: home.x,
       y: home.y,
+      currentTaskId: null,
       targetIndex: null,
       targetSeed: null,
       targetScanZoneId: null,
@@ -353,13 +446,19 @@ export function wakeNurseryWorker(this: SimulationContext): void {
   this.nurseryWorker.message = 'Prêt à repartir';
 }
 
+export function clearNurseryWorkerTask(this: SimulationContext, worker: NurseryWorker): void {
+  if (worker.currentTaskId) this.cancelTask(worker.currentTaskId, 'Tâche interrompue');
+  worker.currentTaskId = null;
+  clearWorkerTargets(worker);
+  worker.waterLoad = 0;
+}
+
 export function setNurseryWorkerBlocked(this: SimulationContext, worker: NurseryWorker, message: string): void {
   if (worker.state === 'blocked' && worker.message === message) return;
+  if (worker.currentTaskId) this.blockTask(worker.currentTaskId, message);
   worker.state = 'blocked';
-  worker.targetIndex = null;
-  worker.targetSeed = null;
-  worker.targetScanZoneId = null;
-  worker.targetBuildingId = null;
+  worker.currentTaskId = null;
+  clearWorkerTargets(worker);
   worker.waterLoad = 0;
   worker.progress = 0;
   worker.message = message;
@@ -370,5 +469,6 @@ export const workersMethods = {
   updateNurseryWorker,
   ensureNurseryWorker,
   wakeNurseryWorker,
+  clearNurseryWorkerTask,
   setNurseryWorkerBlocked,
 };

@@ -82,6 +82,8 @@ export function startSeedSearch(this: SimulationContext): PlacementResult {
   if (worker.state !== 'idle' && worker.state !== 'blocked') return { ok: false, message: 'Le robot est déjà occupé' };
   const target = this.findSeedSearchTarget();
   if (!target) return { ok: false, message: 'Aucun lieu de recherche proche trouvé' };
+  if (worker.currentTaskId) this.cancelTask(worker.currentTaskId, 'Robot envoyé chercher une graine');
+  worker.currentTaskId = null;
   worker.state = 'to-seed-search';
   worker.targetIndex = target.index;
   worker.targetSeed = 'pioneer';
@@ -123,6 +125,7 @@ export function createScanZone(this: SimulationContext, gx: number, gy: number):
   const cells = this.getScanZoneCells(gx, gy).filter((index) => !this.cells[index].known && !this.isScanCellQueued(index));
   const duration = this.getScanZoneDuration(cells.length);
   this.scanZones.push({ id: this.nextScanZoneId++, gx, gy, cells, progress: 0, duration, active: true });
+  this.syncRobotTasks();
   this.wakeNurseryWorker();
   this.addLog(`Zone d’analyse confiée au robot : <b>${cells.length} tuiles</b> à mémoriser en ${Math.ceil(duration)} s.`);
   this.toast('Zone de scan programmée');
@@ -139,12 +142,14 @@ export function getScanZoneDuration(this: SimulationContext, cellCount: number):
 }
 
 export function getScanZoneSummaries(this: SimulationContext): ScanZoneSummary[] {
+  this.syncRobotTasks();
   return this.scanZones.map((zone) => ({
     id: zone.id,
     active: zone.active,
     totalCells: zone.cells.length,
     progress: zone.progress,
     duration: zone.duration,
+    blockedReason: this.getTaskForScanZone(zone.id)?.blockedReason ?? undefined,
   }));
 }
 
@@ -177,13 +182,17 @@ export function paintPlantingZone(this: SimulationContext, gx: number, gy: numbe
   const index = this.index(gx, gy);
   if (this.selectedTool.mode === 'erase') {
     const changed = this.removePlantingZoneCell(index);
-    if (changed) this.notify();
+    if (changed) {
+      this.syncRobotTasks();
+      this.notify();
+    }
     return changed ? { ok: true, message: 'Case retirée de la zone' } : { ok: false, message: 'Aucune zone sur cette case' };
   }
   const seed = this.selectedTool.seed;
   if (!this.isSeedUnlocked(seed)) return { ok: false, message: 'Graine encore inconnue' };
   const changed = this.paintZoneCells(seed, [index]);
   if (changed) {
+    this.syncRobotTasks();
     this.wakeNurseryWorker();
     this.notify();
   }
@@ -194,9 +203,11 @@ export function paintPlantingZone(this: SimulationContext, gx: number, gy: numbe
 }
 
 export function getPlantingZoneSummaries(this: SimulationContext): PlantingZoneSummary[] {
+  this.syncRobotTasks();
   return this.plantingZones.map((zone) => {
     let readyCells = 0;
     let plantedCells = 0;
+    const blockedReason = this.getTasksForPlantingZone(zone.id).find((task) => task.state === 'blocked' && task.blockedReason)?.blockedReason;
     for (const index of zone.cells) {
       const state = this.getPlantingZoneCellState(zone, index);
       if (state === 'ready') readyCells += 1;
@@ -210,6 +221,7 @@ export function getPlantingZoneSummaries(this: SimulationContext): PlantingZoneS
       readyCells,
       plantedCells,
       blockedCells: Math.max(0, zone.cells.length - readyCells - plantedCells),
+      blockedReason: blockedReason ?? undefined,
     };
   });
 }
@@ -231,6 +243,7 @@ export function togglePlantingZone(this: SimulationContext, id: number): boolean
   const zone = this.plantingZones.find((candidate) => candidate.id === id);
   if (!zone) return false;
   zone.active = !zone.active;
+  this.syncRobotTasks();
   this.wakeNurseryWorker();
   this.notify();
   return true;
@@ -240,6 +253,7 @@ export function clearPlantingZone(this: SimulationContext, id: number): boolean 
   const before = this.plantingZones.length;
   this.plantingZones = this.plantingZones.filter((zone) => zone.id !== id);
   if (before === this.plantingZones.length) return false;
+  this.syncRobotTasks();
   this.wakeNurseryWorker();
   this.addLog('Une zone de plantation a été retirée.');
   this.notify();

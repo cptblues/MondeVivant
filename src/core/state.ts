@@ -10,6 +10,7 @@ import type {
   PipeSource,
   PlantingZone,
   PlacementTool,
+  RobotTask,
   ScanZone,
   SeedType,
   SelectedTarget,
@@ -33,6 +34,7 @@ export interface GameState {
   nurseryJob: NurseryJob | null;
   plantingZones: PlantingZone[];
   scanZones: ScanZone[];
+  tasks: RobotTask[];
   nurseryWorker: NurseryWorker | null;
   logs: string[];
   nextBuildingId: number;

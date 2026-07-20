@@ -18,6 +18,12 @@ import type {
   PlacementResult,
   PlacementTool,
   PressureLevel,
+  RobotRole,
+  RobotTask,
+  RobotTaskResources,
+  RobotTaskState,
+  RobotTaskTarget,
+  RobotTaskType,
   ScanZone,
   ScanZoneSummary,
   SeedType,
@@ -64,6 +70,7 @@ export interface SimulationContext {
   nurseryJob: NurseryJob | null;
   plantingZones: PlantingZone[];
   scanZones: ScanZone[];
+  tasks: RobotTask[];
   nurseryWorker: NurseryWorker | null;
   logs: string[];
   readonly events: GameEvents;
@@ -172,6 +179,7 @@ export interface SimulationContext {
   ensureNurseryWorker(nursery: BuildingInstance): NurseryWorker;
   wakeNurseryWorker(): void;
   setNurseryWorkerBlocked(worker: NurseryWorker, message: string): void;
+  clearNurseryWorkerTask(worker: NurseryWorker): void;
   findNextWorkerTarget(worker: NurseryWorker): WorkerTarget | null;
   findNextScanTarget(worker: NurseryWorker): ScanTarget | null;
   isScanTargetQueued(zoneId: number): boolean;
@@ -185,6 +193,30 @@ export interface SimulationContext {
   hasUsableNurseryPipe(nursery: BuildingInstance): boolean;
   isWorkerTargetQueued(seed: SeedType, index: number): boolean;
   moveWorkerToward(worker: NurseryWorker, x: number, y: number, dt: number, speed?: number): boolean;
+  syncRobotTasks(): void;
+  upsertRobotTask(input: {
+    id: string;
+    type: RobotTaskType;
+    target: RobotTaskTarget;
+    zoneId?: number;
+    seed?: SeedType;
+    priority: number;
+    requiredResources?: RobotTaskResources;
+    allowedRoles?: RobotRole[];
+    blockedReason?: string | null;
+  }): RobotTask;
+  getRobotTask(id: string | null | undefined): RobotTask | null;
+  getRobotTaskPosition(task: RobotTask): { x: number; y: number };
+  getRobotTaskBlockedReason(task: RobotTask): string | null;
+  setRobotTaskState(taskId: string, state: RobotTaskState, reason?: string | null, workerId?: string | null): RobotTask | null;
+  selectNextTask(worker: NurseryWorker): RobotTask | null;
+  reserveTask(taskId: string, workerId: string): RobotTask | null;
+  startTask(taskId: string, workerId: string): RobotTask | null;
+  blockTask(taskId: string, reason: string): RobotTask | null;
+  completeTask(taskId: string): RobotTask | null;
+  cancelTask(taskId: string, reason?: string): RobotTask | null;
+  getTaskForScanZone(zoneId: number): RobotTask | null;
+  getTasksForPlantingZone(zoneId: number): RobotTask[];
   getNurseryBuilding(): BuildingInstance | null;
   getPumpBuilding(): BuildingInstance | null;
   workerHome(building: BuildingInstance): { x: number; y: number };

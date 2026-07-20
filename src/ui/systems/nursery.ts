@@ -9,9 +9,10 @@ export function renderNursery(this: UIContext): void {
   const job = this.simulation.nurseryJob;
   const worker = this.simulation.nurseryWorker;
   const summaries = this.simulation.getPlantingZoneSummaries();
+  const taskSignature = this.simulation.tasks.map((task) => `${task.id}:${task.state}:${task.reservedByWorkerId ?? ''}:${task.blockedReason ?? ''}`).join(',');
   const waterSummary = this.buildNurseryWaterSummary();
   const seedSearchAction = this.buildSeedSearchAction();
-  const workerSignature = `${worker?.state ?? 'none'}|${worker?.targetSeed ?? 'none'}|${worker?.targetIndex ?? 'none'}|${worker?.targetBuildingId ?? 'none'}|${worker?.message ?? ''}|${summaries.map((zone) => `${zone.id}:${zone.seed}:${zone.active}:${zone.totalCells}:${zone.readyCells}:${zone.plantedCells}:${zone.blockedCells}`).join(',')}`;
+  const workerSignature = `${worker?.state ?? 'none'}|${worker?.currentTaskId ?? 'none'}|${worker?.targetSeed ?? 'none'}|${worker?.targetIndex ?? 'none'}|${worker?.targetBuildingId ?? 'none'}|${worker?.message ?? ''}|tasks:${taskSignature}|${summaries.map((zone) => `${zone.id}:${zone.seed}:${zone.active}:${zone.totalCells}:${zone.readyCells}:${zone.plantedCells}:${zone.blockedCells}:${zone.blockedReason ?? ''}`).join(',')}`;
   if (job) {
     const signature = `job|${job.mode}|${job.seed}|${job.soil ?? 'none'}|${job.targetCount ?? 0}|${job.cycleStarted}|${job.pausedReason ?? ''}|${this.simulation.seedCount(job.seed)}|${workerSignature}|${waterSummary}`;
     if (signature !== this.nurseryRenderSignature) {
@@ -90,10 +91,14 @@ export function buildWorkerPanel(this: UIContext): string {
   const scanRows = scanSummaries.map((zone) => {
     const progress = Math.round(Math.min(1, zone.progress / zone.duration) * 100);
     const remaining = Math.max(0, Math.ceil(zone.duration - zone.progress));
-    return `<div class="zone-row scan-zone-row"><span class="zone-icon">${SCAN_ICON}</span><p><strong>Scan robot #${zone.id}</strong><small>${progress}% · ${remaining} s · ${zone.totalCells} tuiles</small></p></div>`;
+    const blocked = zone.blockedReason ? ` · bloqué: ${zone.blockedReason}` : '';
+    return `<div class="zone-row scan-zone-row"><span class="zone-icon">${SCAN_ICON}</span><p><strong>Scan robot #${zone.id}</strong><small>${progress}% · ${remaining} s · ${zone.totalCells} tuiles${blocked}</small></p></div>`;
   }).join('');
   const rows = summaries.length
-    ? summaries.map((zone) => `<div class="zone-row ${zone.active ? '' : 'is-paused'}"><span class="zone-icon">${SEEDS[zone.seed].icon}</span><p><strong>${SEEDS[zone.seed].name}</strong><small>${zone.readyCells} prêtes · ${zone.plantedCells} plantées · ${zone.blockedCells} bloquées</small></p><button type="button" data-zone-toggle="${zone.id}">${zone.active ? 'Pause' : 'Reprendre'}</button><button type="button" data-zone-clear="${zone.id}">Vider</button></div>`).join('')
+    ? summaries.map((zone) => {
+      const blocked = zone.blockedReason ? ` · ${zone.blockedReason}` : '';
+      return `<div class="zone-row ${zone.active ? '' : 'is-paused'}"><span class="zone-icon">${SEEDS[zone.seed].icon}</span><p><strong>${SEEDS[zone.seed].name}</strong><small>${zone.readyCells} prêtes · ${zone.plantedCells} plantées · ${zone.blockedCells} bloquées${blocked}</small></p><button type="button" data-zone-toggle="${zone.id}">${zone.active ? 'Pause' : 'Reprendre'}</button><button type="button" data-zone-clear="${zone.id}">Vider</button></div>`;
+    }).join('')
     : '<div class="zone-empty">Sélectionnez une graine dans le dock puis peignez une zone sur la carte.</div>';
   return `<div class="worker-panel"><div class="worker-status"><span class="worker-dot"></span><span><strong>Robot pépiniériste</strong><small>${workerText}</small></span></div><div class="zone-list">${scanRows}${rows}</div></div>`;
 }
