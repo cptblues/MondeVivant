@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Prototype de restauration végétale — irrigation, sols et graines" />
+  <title>Petit Monde Vivant — Réseau d’irrigation</title>
+</head>
+<body>
+  <main class="game-app">
+    <section class="map-stage" aria-label="Carte du territoire"><canvas id="gameCanvas"></canvas></section>
+
+    <div class="overlay top-left"><div class="brand-pill"><span class="brand-icon">🌱</span><span class="brand-copy"><strong>Petit Monde Vivant</strong><small>Acheminer l’eau, comprendre le sol, laisser pousser</small></span></div></div>
+
+    <div class="overlay tutorial-overlay">
+      <section class="tutorial-card" id="tutorialCard" hidden>
+        <small>Étape conseillée</small>
+        <strong id="tutorialTitle"></strong>
+        <p id="tutorialBody"></p>
+      </section>
+    </div>
+
+    <div class="overlay top-center">
+      <div class="resource-stats-bar">
+        <div class="resource-pill">
+          <span class="resource-icon">🪵</span>
+          <span class="resource-main"><small>Bois</small><strong><b id="woodValue">0</b></strong></span>
+        </div>
+        <section class="stats-panel" aria-label="Statistiques du territoire">
+          <div class="stat-gauge" style="--value:0%" id="scannedGauge"><span><strong id="scannedValue">0%</strong><small>Sols</small></span></div>
+          <div class="stat-gauge" style="--value:0%" id="restoredGauge"><span><strong id="restoredValue">0%</strong><small>Reverdi</small></span></div>
+          <div class="stat-gauge" style="--value:0%" id="matureGauge"><span><strong id="matureValue">0</strong><small>Matures</small></span></div>
+          <div class="stat-gauge is-count" style="--value:0%" id="treeGauge"><span><strong id="treeValue">0</strong><small>Arbres</small></span></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="overlay top-right">
+      <div class="view-switcher">
+        <div class="control-group view-group" aria-label="Mode d'affichage">
+          <button class="is-active" type="button" data-view="world" title="Paysage, humidité visible et bâtiments"><span>🌿</span><b>Monde</b></button>
+          <button type="button" data-view="soil" title="Carte des sols analysés et mémorisés"><span>◫</span><b>Sols</b></button>
+          <button type="button" data-view="ecology" title="Lecture de l’humidité, de l’humus et de l’ombre"><span>◉</span><b>Éco</b></button>
+        </div>
+        <small class="view-help-text" id="viewHelp">Paysage, eau visible et bâtiments</small>
+      </div>
+      <div class="control-group" aria-label="Vitesse du temps">
+        <button class="is-active" type="button" data-speed="1">×1</button>
+        <button type="button" data-speed="3">×3</button>
+        <button type="button" data-speed="8">×8</button>
+      </div>
+      <button class="objective-button" id="objectivesButton" type="button"><span>🎯</span><b>Objectifs</b><span class="objective-badge" id="objectiveBadge">0/6</span></button>
+    </div>
+
+    <aside class="overlay objective-drawer" id="objectiveDrawer" aria-label="Objectifs">
+      <div class="drawer-scroll">
+        <header class="drawer-head"><div><h2>Faire revivre la carte</h2><p>Scannez les sols, distribuez la pression et créez des noyaux d’arbres capables de se ressemer.</p></div><button class="close-button" id="closeObjectives" type="button" aria-label="Fermer">×</button></header>
+        <section class="mission-hero"><span class="mission-icon">🪴</span><span><strong>Un réseau temporaire, une forêt autonome</strong><small>La mousse et l’herbe poussent seules. Les arbres matures dispersent au maximum trois graines, seulement dans les endroits assez lumineux.</small></span></section>
+        <h3 class="drawer-section-title">Objectifs actuels</h3><div id="objectiveList"></div>
+        <h3 class="drawer-section-title" id="unlockTitle">Déblocages</h3><div id="unlockList"></div>
+        <h3 class="drawer-section-title">Journal</h3><div id="journalList"></div>
+        <div class="drawer-actions"><button id="resetButton" type="button">Recommencer</button><button id="demoButton" type="button">Démo avancée</button></div>
+      </div>
+    </aside>
+
+    <aside class="overlay inspector" id="inspector" aria-label="Inspection">
+      <header class="inspector-head"><span class="inspector-icon" id="inspectorIcon">💧</span><span><h2 id="inspectorTitle">Pompe solaire</h2><p id="inspectorSubtitle">Construction sélectionnée</p></span><button class="close-button" id="closeInspector" type="button" aria-label="Fermer">×</button></header>
+
+      <section class="inspector-section" id="buildingSection">
+        <div class="status-card"><span id="buildingStatus">Production active</span><strong id="radiusValue">Aucun rayon</strong></div>
+        <div class="water-progress" id="buildingWaterWrap" hidden><div><span id="buildingWaterLabel">Réserve d’eau</span><strong id="buildingWaterValue">0/0</strong></div><span class="track"><i id="buildingWaterBar"></i></span><small id="buildingWaterDetail"></small></div>
+        <div class="job-progress" id="buildingProgressWrap" hidden><div><span id="buildingProgressLabel">Analyse</span><strong id="buildingProgressValue">0%</strong></div><span class="track"><i id="buildingProgressBar"></i></span></div>
+      </section>
+
+      <section class="inspector-section pipe-section" id="pipeSection" hidden>
+        <div class="pipe-status-grid">
+          <div><small>Pression</small><strong id="pipePressure">Moyenne</strong></div>
+          <div><small>Distance</small><strong id="pipeDistance">0 cases</strong></div>
+          <div><small>Sortie</small><strong id="pipeOutletStatus">Absente</strong></div>
+          <div><small>Débit sortie</small><strong id="pipeConsumption">0 💧/s</strong></div>
+        </div>
+        <p class="pipe-help" id="pipeHelp">Ajoutez une sortie sur cette tuile pour humidifier les cases voisines.</p>
+        <div class="pipe-actions">
+          <button id="createOutletButton" type="button">Créer une sortie</button>
+          <button id="toggleOutletButton" type="button" hidden>Ouvrir la sortie</button>
+          <button id="removeOutletButton" class="secondary" type="button" hidden>Retirer la sortie</button>
+          <button id="removePipeButton" class="secondary" type="button">Retirer ce tuyau</button>
+        </div>
+      </section>
+
+      <section class="inspector-section" id="cellSection" hidden>
+        <div class="soil-card" id="soilCard"></div>
+        <div class="condition-row"><span>Humidité</span><span class="track"><i id="waterBar"></i></span><strong id="cellWaterValue">0</strong></div>
+        <div class="condition-row"><span>Ombre</span><span class="track"><i id="shadeBar"></i></span><strong id="cellShadeValue">0</strong></div>
+        <div class="condition-row"><span>Humus</span><span class="track"><i id="humusBar"></i></span><strong id="cellHumusValue">0</strong></div>
+        <div class="tree-note" id="treeNote" hidden></div>
+        <div class="growth-diagnostic" id="growthDiagnostic"></div>
+      </section>
+
+      <section class="nursery-panel" id="nurseryPanel" hidden>
+        <div class="nursery-tabs"><button class="is-active" type="button" data-nursery-mode="cultivation">Cultures</button><button type="button" data-nursery-mode="research">Recherche</button></div>
+        <div id="nurseryContent"></div>
+      </section>
+
+      <section class="inspector-actions" id="inspectorActions">
+        <button class="secondary" id="harvestWoodButton" type="button" hidden>Abattre pour bois</button>
+        <button class="secondary" id="removeButton" type="button" hidden>Récupérer la construction</button>
+        <button class="secondary" id="clearNetworkButton" type="button" hidden>Démonter le réseau</button>
+      </section>
+    </aside>
+
+    <div class="overlay bottom-center"><nav class="tool-dock" id="toolDock" aria-label="Outils disponibles"></nav></div>
+    <div class="overlay zoom-overlay"><div class="zoom-controls"><button id="zoomIn" type="button" aria-label="Zoomer">+</button><span id="zoomValue">100%</span><button id="zoomOut" type="button" aria-label="Dézoomer">−</button><button id="fitMap" type="button" aria-label="Ajuster la carte">⌂</button></div></div>
+    <div class="overlay help-overlay"><div class="help-pill"><span>Molette : zoom</span><span>·</span><span>Glisser : déplacer</span><span>·</span><kbd>F</kbd><span>recentrer</span></div></div>
+    <div class="toast" id="toast"></div><div class="placement-hint" id="placementHint"></div>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
