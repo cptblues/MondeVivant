@@ -1,9 +1,13 @@
 import { RESEARCH_SEED_FOR_SOIL, SEEDS } from '../config';
-import { CISTERN_CAPACITY, CISTERN_IRRIGATION_AMOUNT, CISTERN_IRRIGATION_RADIUS, GROUND_COVER, MAX_SEEDS_PER_TREE, OUTLET_IRRIGATION, PUMP_IRRIGATION_AMOUNT, PUMP_IRRIGATION_RADIUS } from '../gameConfig';
+import { CISTERN_CAPACITY, CISTERN_IRRIGATION_AMOUNT, CISTERN_IRRIGATION_RADIUS, GROUND_COVER, MAX_SEEDS_PER_TREE, OUTLET_IRRIGATION, PUMP_IRRIGATION_AMOUNT, PUMP_IRRIGATION_RADIUS, TREE_GROWTH_STAGE_FACTORS } from '../gameConfig';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { Cell, CellGrowthDiagnostics, FieldSet } from '../types';
 import type { SimulationContext } from '../simulationContext';
 import { clamp, distance, hash } from '../../utils/math';
+
+function hasRobotSoilPreparation(cell: Cell): boolean {
+  return cell.preparedByRobotHouseId !== null;
+}
 
 export function updateGroundCover(this: SimulationContext, cell: Cell, boost: number, dt: number): void {
   const mossGood = cell.water >= GROUND_COVER.mossWater;
@@ -31,7 +35,7 @@ export function updateGroundCover(this: SimulationContext, cell: Cell, boost: nu
       cell.coverProgress = 0;
       cell.coverStress = 0;
       this.addLog('La tuile devient une petite <b>prairie</b>.');
-    } else if (cell.coverStress > 18) {
+    } else if (cell.coverStress > GROUND_COVER.mossStressTolerance) {
       cell.cover = 0;
       cell.coverProgress = 0.5;
       cell.coverStress = 0;
@@ -40,7 +44,7 @@ export function updateGroundCover(this: SimulationContext, cell: Cell, boost: nu
   }
   const stableGrass = cell.water >= GROUND_COVER.stableGrassWater && cell.humus >= GROUND_COVER.stableGrassHumus;
   cell.coverStress = stableGrass ? Math.max(0, cell.coverStress - dt) : cell.coverStress + dt;
-  if (cell.coverStress > 25) {
+  if (cell.coverStress > GROUND_COVER.grassStressTolerance) {
     cell.cover = 1;
     cell.coverProgress = 0.6;
     cell.coverStress = 4;
@@ -55,8 +59,8 @@ export function updateTree(this: SimulationContext, index: number, boost: number
     return;
   }
   const definition = SEEDS[cell.tree];
-  const stageFactor = [0.72, 0.9, 1.03][cell.treeStage];
-  const coverOk = cell.cover >= (cell.treeStage === 0 ? 1 : 2);
+  const stageFactor = TREE_GROWTH_STAGE_FACTORS[Math.min(cell.treeStage, TREE_GROWTH_STAGE_FACTORS.length - 1)];
+  const coverOk = hasRobotSoilPreparation(cell) || cell.cover >= (cell.treeStage === 0 ? 1 : 2);
   const lightLimit = cell.treeStage === 0 ? 30 : cell.treeStage === 1 ? 50 : 76;
   const good = coverOk && cell.water >= definition.waterNeed * stageFactor && cell.humus >= definition.humusNeed * stageFactor && cell.shade <= lightLimit;
   if (good) {
@@ -215,6 +219,7 @@ export function getCellGrowthDiagnostics(this: SimulationContext, index: number)
     `Humus ${Math.round(cell.humus)}`,
     `Ombre ${Math.round(cell.shade)}`,
     cell.cover === 2 ? 'Prairie installée' : cell.cover === 1 ? 'Mousse installée' : 'Sol nu',
+    ...(hasRobotSoilPreparation(cell) ? ['Sol préparé par robot'] : []),
   ] : [];
   if (!cell.known && !cell.tree) {
     return {
@@ -251,14 +256,15 @@ export function getCellGrowthDiagnostics(this: SimulationContext, index: number)
     };
   }
   const definition = SEEDS[cell.tree];
-  const stageFactor = [0.72, 0.9, 1.03][cell.treeStage];
+  const stageFactor = TREE_GROWTH_STAGE_FACTORS[Math.min(cell.treeStage, TREE_GROWTH_STAGE_FACTORS.length - 1)];
   const coverNeeded = cell.treeStage === 0 ? 1 : 2;
+  const robotPrepared = hasRobotSoilPreparation(cell);
   const lightLimit = cell.treeStage === 0 ? 30 : cell.treeStage === 1 ? 50 : 76;
   const waterNeed = definition.waterNeed * stageFactor;
   const humusNeed = definition.humusNeed * stageFactor;
   const blockers: string[] = [];
   const stressReasons: string[] = [];
-  if (cell.cover < coverNeeded) {
+  if (!robotPrepared && cell.cover < coverNeeded) {
     const reason = cell.treeStage === 0 ? 'Besoin de mousse' : 'Prairie pas assez stable';
     stressReasons.push(reason);
     blockers.push(cell.treeStage === 0 ? 'La graine a besoin de mousse.' : 'La croissance demande une prairie stable.');

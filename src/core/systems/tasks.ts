@@ -15,6 +15,23 @@ function setTaskAvailability(task: RobotTask, blockedReason: string | null): voi
   task.blockedReason = blockedReason;
 }
 
+function isTaskHeldByWorker(simulation: SimulationContext, task: RobotTask): boolean {
+  if (!task.reservedByWorkerId) return false;
+  const workers = [
+    simulation.nurseryWorker,
+    ...simulation.robotHouseWorkers,
+  ].filter((worker): worker is NurseryWorker => Boolean(worker));
+  return workers.some((worker) => worker.id === task.reservedByWorkerId && worker.currentTaskId === task.id);
+}
+
+function releaseStaleTaskReservation(simulation: SimulationContext, task: RobotTask): void {
+  if (task.state !== 'reserved' && task.state !== 'in-progress') return;
+  if (isTaskHeldByWorker(simulation, task)) return;
+  task.state = 'available';
+  task.reservedByWorkerId = null;
+  task.blockedReason = null;
+}
+
 function getBuildingCapacity(building: BuildingInstance): number {
   return building.type === 'cistern' ? CISTERN_CAPACITY : NURSERY_CAPACITY;
 }
@@ -32,6 +49,10 @@ export function upsertRobotTask(
     zoneId?: number;
     parcelId?: string;
     homeBuildingId?: number;
+    seedRequestId?: string;
+    sourceBuildingId?: number;
+    destinationBuildingId?: number;
+    seedQuantities?: Partial<Record<SeedType, number>>;
     seed?: SeedType;
     priority: number;
     requiredResources?: RobotTaskResources;
@@ -50,6 +71,10 @@ export function upsertRobotTask(
       zoneId: input.zoneId,
       parcelId: input.parcelId,
       homeBuildingId: input.homeBuildingId,
+      seedRequestId: input.seedRequestId,
+      sourceBuildingId: input.sourceBuildingId,
+      destinationBuildingId: input.destinationBuildingId,
+      seedQuantities: input.seedQuantities,
       seed: input.seed,
       priority: input.priority,
       state: blockedReason ? 'blocked' : 'available',
@@ -63,11 +88,16 @@ export function upsertRobotTask(
     this.tasks.push(task);
     return task;
   }
+  releaseStaleTaskReservation(this, task);
   task.type = input.type;
   task.target = input.target;
   task.zoneId = input.zoneId;
   task.parcelId = input.parcelId;
   task.homeBuildingId = input.homeBuildingId;
+  task.seedRequestId = input.seedRequestId;
+  task.sourceBuildingId = input.sourceBuildingId;
+  task.destinationBuildingId = input.destinationBuildingId;
+  task.seedQuantities = input.seedQuantities;
   task.seed = input.seed;
   task.priority = input.priority;
   task.requiredResources = input.requiredResources ?? {};
@@ -91,6 +121,7 @@ export function getRobotTaskPosition(this: SimulationContext, task: RobotTask): 
 }
 
 export function getRobotTaskBlockedReason(this: SimulationContext, task: RobotTask): string | null {
+  if (task.type === 'deliver_seeds') return this.getSeedDeliveryTaskBlockedReason(task);
   if (task.homeBuildingId !== undefined) {
     return this.getRestorationTaskBlockedReason(task);
   }
@@ -171,6 +202,8 @@ export function completeTask(this: SimulationContext, taskId: string): RobotTask
 }
 
 export function cancelTask(this: SimulationContext, taskId: string, reason = 'Intention retirée'): RobotTask | null {
+  const task = this.getRobotTask(taskId);
+  if (task?.type === 'deliver_seeds') this.handleSeedDeliveryTaskCancellation(task, reason);
   return this.setRobotTaskState(taskId, 'cancelled', reason);
 }
 
@@ -185,6 +218,7 @@ export function getTasksForPlantingZone(this: SimulationContext, zoneId: number)
 export function syncRobotTasks(this: SimulationContext): void {
   const desiredIds = new Set<string>();
   this.syncRestorationTasks(desiredIds);
+  this.syncSeedDeliveryTasks(desiredIds);
 
   for (const zone of this.scanZones) {
     const taskId = `scan:${zone.id}`;

@@ -6,7 +6,7 @@ import type { SimulationContext } from '../simulationContext';
 import { clamp } from '../../utils/math';
 
 export function validateSeedPlacement(this: SimulationContext, seed: SeedType, gx: number, gy: number): PlacementResult {
-  return this.validateSeedPlacementForInventory(seed, gx, gy, this.seedCount(seed));
+  return this.validateSeedPlacementForInventory(seed, gx, gy, this.getFreeNurserySeedCount(seed));
 }
 
 export function validateSeedPlacementForInventory(this: SimulationContext, seed: SeedType, gx: number, gy: number, availableSeeds: number): PlacementResult {
@@ -34,7 +34,7 @@ export function plantSeed(this: SimulationContext, seed: SeedType, gx: number, g
 export function startCultivation(this: SimulationContext, seed: SeedType, targetCount?: number): PlacementResult {
   if (!this.hasNursery()) return { ok: false, message: 'Placez d’abord la pépinière' };
   if (this.nurseryJob) return { ok: false, message: 'La pépinière est déjà occupée' };
-  if (!this.isSeedUnlocked(seed) || this.seedCount(seed) <= 0) return { ok: false, message: 'Graine indisponible' };
+  if (!this.isSeedUnlocked(seed) || this.getFreeNurserySeedCount(seed) <= 0) return { ok: false, message: 'Graine indisponible' };
   const requestedQuota = Math.max(this.seedCount(seed) + 1, Math.floor(targetCount ?? 10));
   if (requestedQuota <= this.seedCount(seed)) return { ok: false, message: 'Le quota est déjà atteint' };
   this.nurseryJob = {
@@ -57,7 +57,7 @@ export function startResearch(this: SimulationContext, seed: SeedType, soil: Ter
   if (!this.hasNursery()) return { ok: false, message: 'Placez d’abord la pépinière' };
   if (this.nurseryJob) return { ok: false, message: 'La pépinière est déjà occupée' };
   if (seed !== 'pioneer') return { ok: false, message: 'La recherche utilise une graine pionnière comme base' };
-  if (!this.isSeedUnlocked(seed) || this.seedCount(seed) <= 0) return { ok: false, message: 'Graine indisponible' };
+  if (!this.isSeedUnlocked(seed) || this.getFreeNurserySeedCount(seed) <= 0) return { ok: false, message: 'Graine indisponible' };
   if (!this.discoveredSoils.has(soil)) return { ok: false, message: 'Ce type de sol n’a pas encore été révélé' };
   const resultSeed = RESEARCH_SEED_FOR_SOIL[soil];
   if (!resultSeed) return { ok: false, message: 'Ce sol ne donne aucune nouvelle variété pour le moment' };
@@ -81,7 +81,7 @@ export function startResearch(this: SimulationContext, seed: SeedType, soil: Ter
 export function startSeedSearch(this: SimulationContext): PlacementResult {
   const nursery = this.getNurseryBuilding();
   if (!nursery) return { ok: false, message: 'Placez d’abord la pépinière' };
-  if (this.seedInventory.pioneer > 0) return { ok: false, message: 'Une graine basique est déjà disponible' };
+  if (this.getFreeNurserySeedCount('pioneer') > 0) return { ok: false, message: 'Une graine basique est déjà disponible' };
   const worker = this.ensureNurseryWorker(nursery);
   if (worker.state !== 'idle' && worker.state !== 'blocked') return { ok: false, message: 'Le robot est déjà occupé' };
   const target = this.findSeedSearchTarget();
@@ -287,7 +287,7 @@ export function tryStartNurseryCycle(this: SimulationContext, job: NurseryJob): 
     this.pauseNurseryJob(job, 'Pépinière absente.');
     return false;
   }
-  if (this.seedInventory[job.seed] <= 0) {
+  if (this.getFreeNurserySeedCount(job.seed) <= 0) {
     this.pauseNurseryJob(job, `Aucune graine mère de ${SEEDS[job.seed].name}.`);
     return false;
   }

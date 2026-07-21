@@ -15,6 +15,8 @@ export const ROBOT_HOUSE_COST = 12;
 export const ROBOT_HOUSE_CAPACITY = 36;
 export const ROBOT_HOUSE_WATER_TRANSFER_AMOUNT = 8;
 export const ROBOT_HOUSE_SEED_TRANSFER_AMOUNT = 1;
+export const ROBOT_HOUSE_SEED_REQUEST_MARGIN = 1;
+export const ROBOT_HOUSE_SEED_REQUEST_MAX_BATCH = 4;
 export const ROBOT_HOUSE_SCAN_TILE_DURATION = 0.75;
 export const ROBOT_HOUSE_PREPARE_DURATION = 1.05;
 export const ROBOT_HOUSE_PLANT_DURATION = 1.2;
@@ -22,9 +24,17 @@ export const ROBOT_HOUSE_WATER_DURATION = 0.9;
 export const ROBOT_HOUSE_WATER_PER_TASK = 2.5;
 export const ROBOT_HOUSE_WATERING_AMOUNT = 32;
 export const ROBOT_HOUSE_WATER_BUFFER = 5;
+export const ROBOT_HOUSE_PLANT_WATER_BUFFER = 1;
+export const ROBOT_HOUSE_MAINTENANCE_WATER_BUFFER = 5;
+export const ROBOT_HOUSE_PREPARED_HUMUS = 8;
+export const ROBOT_HOUSE_PREPARED_COVER_PROGRESS = 0.7;
 export const ROBOT_HOUSE_MAX_PARCEL_WIDTH = 12;
 export const ROBOT_HOUSE_MAX_PARCEL_HEIGHT = 10;
 export const ROBOT_HOUSE_MAX_PARCEL_TILES = 96;
+export const ROBOT_HOUSE_MIN_TREE_SPACING = 3.2;
+export const ROBOT_HOUSE_PLANNED_TREE_SPACING = 3;
+export const ROBOT_HOUSE_MAX_PLANTING_SHADE = 24;
+export const ROBOT_HOUSE_CANOPY_REEVALUATION_MIN_STAGE = 2;
 export const ROBOT_HOUSE_PIPE_FILL_RATE: Record<PressureLevel, number> = {
   strong: 2.4,
   medium: 1.45,
@@ -41,6 +51,7 @@ export const RESTORATION_AUTONOMY = {
   healthyStressLimit: 8,
   waterStressRatio: 0.86,
 } as const;
+export const TREE_GROWTH_STAGE_FACTORS = [0.72, 0.9, 1.03] as const;
 
 export const CISTERN_COST = 0;
 export const CISTERN_WOOD_COST = 8;
@@ -120,7 +131,14 @@ export const GROUND_COVER = {
   grassHumus: 4.5,
   stableGrassWater: 13,
   stableGrassHumus: 3,
+  mossStressTolerance: 42,
+  grassStressTolerance: 60,
 } as const;
+
+export const CELL_WATER_RISE_RATE = 0.22;
+export const CELL_WATER_DRY_RATE = 0.04;
+export const CELL_SHADE_ADJUST_RATE = 0.18;
+export const CELL_HUMUS_ADJUST_RATE = 0.14;
 
 export const MAX_SEEDS_PER_TREE = 3;
 export const WOOD_PER_MATURE_TREE = 10;
@@ -129,12 +147,15 @@ export const WORKER_SPEED_CELLS_PER_SECOND = 4.6;
 export const WORKER_PLANT_DURATION = 1.2;
 export const WORKER_TRANSFER_DURATION = 1.1;
 export const NURSERY_WORKER_CAPACITY = 5;
+export const NURSERY_ROBOT_SEED_CAPACITY = 5;
 export const NURSERY_WATER_FETCH_THRESHOLD = 7;
 export const NURSERY_ROBOT_WATER_RADIUS = 12;
 export const SEED_SEARCH_DURATION = 15;
 export const SEED_SEARCH_RADIUS = 7;
 export const ROBOT_TASK_PRIORITIES = {
   waterDelivery: 90,
+  seedDeliveryUrgent: 96,
+  seedDelivery: 68,
   restorationWater: 82,
   restorationScan: 72,
   scan: 60,
@@ -152,6 +173,8 @@ export const GAME_CONFIG = {
     capacity: ROBOT_HOUSE_CAPACITY,
     waterTransferAmount: ROBOT_HOUSE_WATER_TRANSFER_AMOUNT,
     seedTransferAmount: ROBOT_HOUSE_SEED_TRANSFER_AMOUNT,
+    seedRequestMargin: ROBOT_HOUSE_SEED_REQUEST_MARGIN,
+    seedRequestMaxBatch: ROBOT_HOUSE_SEED_REQUEST_MAX_BATCH,
     scanTileDuration: ROBOT_HOUSE_SCAN_TILE_DURATION,
     prepareDuration: ROBOT_HOUSE_PREPARE_DURATION,
     plantDuration: ROBOT_HOUSE_PLANT_DURATION,
@@ -159,14 +182,22 @@ export const GAME_CONFIG = {
     waterPerTask: ROBOT_HOUSE_WATER_PER_TASK,
     wateringAmount: ROBOT_HOUSE_WATERING_AMOUNT,
     waterBuffer: ROBOT_HOUSE_WATER_BUFFER,
+    plantWaterBuffer: ROBOT_HOUSE_PLANT_WATER_BUFFER,
+    maintenanceWaterBuffer: ROBOT_HOUSE_MAINTENANCE_WATER_BUFFER,
+    preparedHumus: ROBOT_HOUSE_PREPARED_HUMUS,
+    preparedCoverProgress: ROBOT_HOUSE_PREPARED_COVER_PROGRESS,
     maxParcelWidth: ROBOT_HOUSE_MAX_PARCEL_WIDTH,
     maxParcelHeight: ROBOT_HOUSE_MAX_PARCEL_HEIGHT,
     maxParcelTiles: ROBOT_HOUSE_MAX_PARCEL_TILES,
+    minTreeSpacing: ROBOT_HOUSE_MIN_TREE_SPACING,
+    plannedTreeSpacing: ROBOT_HOUSE_PLANNED_TREE_SPACING,
+    maxPlantingShade: ROBOT_HOUSE_MAX_PLANTING_SHADE,
+    canopyReevaluationMinStage: ROBOT_HOUSE_CANOPY_REEVALUATION_MIN_STAGE,
     pipeFillRate: ROBOT_HOUSE_PIPE_FILL_RATE,
     autonomy: RESTORATION_AUTONOMY,
   },
   pipes: { maxLength: PIPE_MAX_LENGTH, cisternMaxLength: CISTERN_PIPE_MAX_LENGTH, neighbors: PIPE_NEIGHBORS, outletIrrigation: OUTLET_IRRIGATION, outletConsumption: OUTLET_CONSUMPTION, cisternFillRate: CISTERN_PIPE_FILL_RATE, nurseryFillRate: NURSERY_PIPE_FILL_RATE, pressureThresholds: PRESSURE_THRESHOLDS },
   irrigation: { pumpRadius: PUMP_IRRIGATION_RADIUS, pumpAmount: PUMP_IRRIGATION_AMOUNT, pumpConsumption: PUMP_LOCAL_IRRIGATION_CONSUMPTION, cisternRadius: CISTERN_IRRIGATION_RADIUS, cisternAmount: CISTERN_IRRIGATION_AMOUNT, cisternConsumption: CISTERN_LOCAL_IRRIGATION_CONSUMPTION },
-  workers: { nurserySpeed: WORKER_SPEED_CELLS_PER_SECOND, nurseryCapacity: NURSERY_WORKER_CAPACITY, nurseryWaterRadius: NURSERY_ROBOT_WATER_RADIUS, transferDuration: WORKER_TRANSFER_DURATION, taskPriorities: ROBOT_TASK_PRIORITIES },
-  ecology: { groundCover: GROUND_COVER, maxSeedsPerTree: MAX_SEEDS_PER_TREE, woodPerMatureTree: WOOD_PER_MATURE_TREE },
+  workers: { nurserySpeed: WORKER_SPEED_CELLS_PER_SECOND, nurseryCapacity: NURSERY_WORKER_CAPACITY, nurserySeedCapacity: NURSERY_ROBOT_SEED_CAPACITY, nurseryWaterRadius: NURSERY_ROBOT_WATER_RADIUS, transferDuration: WORKER_TRANSFER_DURATION, taskPriorities: ROBOT_TASK_PRIORITIES },
+  ecology: { groundCover: GROUND_COVER, treeGrowthStageFactors: TREE_GROWTH_STAGE_FACTORS, waterRiseRate: CELL_WATER_RISE_RATE, waterDryRate: CELL_WATER_DRY_RATE, shadeAdjustRate: CELL_SHADE_ADJUST_RATE, humusAdjustRate: CELL_HUMUS_ADJUST_RATE, maxSeedsPerTree: MAX_SEEDS_PER_TREE, woodPerMatureTree: WOOD_PER_MATURE_TREE },
 } as const;

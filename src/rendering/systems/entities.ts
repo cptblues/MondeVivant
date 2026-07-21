@@ -1,4 +1,4 @@
-import { BUILDINGS, SEEDS } from '../../core/config';
+import { BUILDINGS, SEED_ORDER, SEEDS } from '../../core/config';
 import { CELL_SIZE, GRID_HEIGHT, GRID_WIDTH } from '../../core/types';
 import type { BuildingInstance } from '../../core/types';
 import type { GameSimulation } from '../../core/GameSimulation';
@@ -191,6 +191,8 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
   const targetSeed = worker.targetSeed;
   const nursery = simulation.buildings.find((building) => building.type === 'nursery');
   const pump = simulation.buildings.find((building) => building.type === 'pump');
+  const seedCargo = SEED_ORDER.reduce((total, seed) => total + (worker.seedLoad[seed] ?? 0), 0);
+  const deliveryTask = simulation.getRobotTask(worker.currentTaskId);
   const waterBuilding = worker.targetBuildingId !== null
     ? simulation.buildings.find((building) => building.id === worker.targetBuildingId)
     : null;
@@ -199,6 +201,13 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
     : worker.state === 'to-nursery' || worker.state === 'unloading-water'
       ? waterBuilding ?? nursery
       : null;
+  const seedTarget = worker.state === 'to-seed-load' || worker.state === 'loading-seeds'
+    ? deliveryTask?.sourceBuildingId === undefined ? nursery : simulation.buildings.find((building) => building.id === deliveryTask.sourceBuildingId)
+    : worker.state === 'to-seed-delivery' || worker.state === 'unloading-seeds'
+      ? deliveryTask?.destinationBuildingId === undefined ? waterBuilding : simulation.buildings.find((building) => building.id === deliveryTask.destinationBuildingId)
+      : worker.state === 'returning-seeds'
+        ? nursery
+        : null;
   if (waterTarget) {
     const tx = (waterTarget.gx + 0.5) * CELL_SIZE;
     const ty = (waterTarget.gy + 0.5) * CELL_SIZE;
@@ -206,6 +215,19 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
     ctx.strokeStyle = 'rgba(54, 119, 168, .42)';
     ctx.lineWidth = 1.4;
     ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.lineTo(tx, ty);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (seedTarget) {
+    const tx = (seedTarget.gx + 0.5) * CELL_SIZE;
+    const ty = (seedTarget.gy + 0.5) * CELL_SIZE;
+    ctx.save();
+    ctx.strokeStyle = targetSeed ? `rgba(${this.seedZoneColor(targetSeed)}, .48)` : 'rgba(52, 114, 79, .42)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 5]);
     ctx.beginPath();
     ctx.moveTo(px, py);
     ctx.lineTo(tx, ty);
@@ -227,9 +249,27 @@ export function drawNurseryWorker(this: RendererContext, simulation: GameSimulat
   }
   const accent = worker.waterLoad > 0.1 || worker.state.includes('water') || worker.state === 'to-pump' || worker.state === 'to-nursery'
     ? '#3177a8'
-    : targetSeed ? `rgb(${this.seedZoneColor(targetSeed)})` : '#34724f';
-  const progress = worker.state === 'planting' || worker.state === 'scanning' || worker.state === 'searching-seed' || worker.state === 'loading-water' || worker.state === 'unloading-water' ? worker.progress : null;
+    : seedCargo > 0 || worker.state.includes('seed') || worker.state.includes('seeds')
+      ? targetSeed ? `rgb(${this.seedZoneColor(targetSeed)})` : '#34724f'
+      : targetSeed ? `rgb(${this.seedZoneColor(targetSeed)})` : '#34724f';
+  const progress = worker.state === 'planting' || worker.state === 'scanning' || worker.state === 'searching-seed' || worker.state === 'loading-water' || worker.state === 'unloading-water' || worker.state === 'loading-seeds' || worker.state === 'unloading-seeds' ? worker.progress : null;
   this.drawRobot(px, py, accent, worker.state === 'blocked', progress, worker.waterLoad > 0.1);
+  if (seedCargo > 0) {
+    const seed = SEED_ORDER.find((candidate) => (worker.seedLoad[candidate] ?? 0) > 0);
+    ctx.save();
+    ctx.fillStyle = '#f7f2dc';
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1.2;
+    this.roundedRect(px + 5, py - 21, 17, 13, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#26351d';
+    ctx.font = '10px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${seed ? SEEDS[seed].icon : '•'}${seedCargo}`, px + 13.5, py - 14.2);
+    ctx.restore();
+  }
 }
 
 export function drawRobotHouseWorkers(this: RendererContext, simulation: GameSimulation): void {

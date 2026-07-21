@@ -7,6 +7,7 @@ import { progressionMethods } from './progression';
 import { queriesMethods } from './queries';
 import { restorationMethods } from './restoration';
 import { runtimeMethods } from './runtime';
+import { seedRequestMethods } from './seedRequests';
 import { tasksMethods } from './tasks';
 import { workerTargetMethods } from './workerTargets';
 import { workersMethods } from './workers';
@@ -18,6 +19,7 @@ export const installSimulationSystems = (prototype: object): void => {
     buildingsMethods,
     nurseryMethods,
     restorationMethods,
+    seedRequestMethods,
     tasksMethods,
     workersMethods,
     workerTargetMethods,

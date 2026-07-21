@@ -98,6 +98,11 @@ export function findSeedSearchTarget(this: SimulationContext): { index: number; 
 
 export function getWorkerIdleMessage(this: SimulationContext): string {
   const nursery = this.getNurseryBuilding();
+  const seedRequests = nursery ? this.getSeedRequestsForNursery(nursery.id).filter((request) => ['pending', 'reserved', 'blocked', 'partially_delivered'].includes(request.status)) : [];
+  const blockedSeedDelivery = this.tasks.find((task) => task.type === 'deliver_seeds' && task.state === 'blocked' && task.blockedReason);
+  if (blockedSeedDelivery?.blockedReason) return `Livraison de graines bloquée : ${blockedSeedDelivery.blockedReason}`;
+  if (seedRequests.some((request) => request.status === 'blocked')) return seedRequests.find((request) => request.status === 'blocked')?.blockedReason ?? 'Livraison de graines bloquée';
+  if (seedRequests.length) return 'Livraisons de graines en attente';
   if (nursery && this.findNurseryWaterTarget(nursery)) return 'Attend de pouvoir ravitailler un bâtiment proche';
   if (this.scanZones.some((zone) => zone.active && zone.progress < zone.duration)) return 'Scan de zone en attente';
   const zonesWithCells = this.plantingZones.filter((zone) => zone.cells.length > 0);

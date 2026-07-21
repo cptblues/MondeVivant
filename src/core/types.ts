@@ -20,7 +20,7 @@ export type SeedType = 'pioneer' | 'willow' | 'juniper' | 'tamarisk';
 export type PressureLevel = 'strong' | 'medium' | 'weak' | 'none';
 export type PipeSourceType = 'pump' | 'cistern';
 export type RobotRole = 'nursery' | 'restoration';
-export type RobotTaskType = 'scan' | 'plant' | 'water-delivery' | 'prepare_soil' | 'water_plant';
+export type RobotTaskType = 'scan' | 'plant' | 'water-delivery' | 'prepare_soil' | 'water_plant' | 'deliver_seeds';
 export type RobotTaskState = 'available' | 'reserved' | 'in-progress' | 'blocked' | 'completed' | 'cancelled';
 export interface PipeSource {
   type: PipeSourceType;
@@ -42,6 +42,11 @@ export type NurseryWorkerState =
   | 'to-seed-search'
   | 'searching-seed'
   | 'returning-seed'
+  | 'to-seed-load'
+  | 'loading-seeds'
+  | 'to-seed-delivery'
+  | 'unloading-seeds'
+  | 'returning-seeds'
   | 'to-pump'
   | 'loading-water'
   | 'to-nursery'
@@ -236,6 +241,7 @@ export interface RobotWorker {
   targetScanZoneId: number | null;
   targetBuildingId: number | null;
   waterLoad: number;
+  seedLoad: Partial<Record<SeedType, number>>;
   progress: number;
   message: string;
 }
@@ -259,6 +265,10 @@ export interface RobotTask {
   zoneId?: number;
   parcelId?: string;
   homeBuildingId?: number;
+  seedRequestId?: string;
+  sourceBuildingId?: number;
+  destinationBuildingId?: number;
+  seedQuantities?: Partial<Record<SeedType, number>>;
   seed?: SeedType;
   priority: number;
   state: RobotTaskState;
@@ -278,6 +288,48 @@ export type RestorationParcelState =
   | 'planting'
   | 'maintaining'
   | 'autonomous';
+
+export type SeedSupplyState =
+  | 'none'
+  | 'waiting_for_seed_request'
+  | 'waiting_for_seed_stock'
+  | 'waiting_for_seed_assignment'
+  | 'waiting_for_seed_delivery'
+  | 'seeds_delivered';
+
+export type SeedRequestStatus =
+  | 'pending'
+  | 'reserved'
+  | 'in_delivery'
+  | 'partially_delivered'
+  | 'completed'
+  | 'blocked'
+  | 'canceled';
+
+export interface SeedRequest {
+  id: string;
+  homeBuildingId: number;
+  parcelId: string;
+  seed: SeedType;
+  quantityRequested: number;
+  quantityReserved: number;
+  quantityDelivered: number;
+  priority: number;
+  status: SeedRequestStatus;
+  assignedNurseryId: number | null;
+  blockedReason: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SeedReservation {
+  id: string;
+  requestId: string;
+  nurseryId: number;
+  seed: SeedType;
+  quantity: number;
+  createdAt: number;
+}
 
 export interface RestorationParcelBounds {
   minX: number;
@@ -300,6 +352,7 @@ export interface RestorationParcel {
   homeBuildingId: number;
   bounds: RestorationParcelBounds | null;
   state: RestorationParcelState;
+  seedSupplyState: SeedSupplyState;
   totalTiles: number;
   analyzedTiles: number;
   preparedTiles: number;
@@ -309,6 +362,7 @@ export interface RestorationParcel {
   speciesPresent: number;
   healthyPlantRatio: number;
   developedTrees: number;
+  seedNeeds: Partial<Record<SeedType, number>>;
   needs: string[];
   blockers: string[];
   progress: RestorationParcelProgress;

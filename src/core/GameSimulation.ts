@@ -16,6 +16,8 @@ import type {
   RobotWorker,
   RobotTask,
   ScanZone,
+  SeedRequest,
+  SeedReservation,
   SeedType,
   SelectedTarget,
   TerrainType,
@@ -42,6 +44,8 @@ export class GameSimulation {
   public nurseryWorker: NurseryWorker | null = null;
   public robotHouseWorkers: RobotWorker[] = [];
   public restorationParcels: RestorationParcel[] = [];
+  public seedRequests: SeedRequest[] = [];
+  public seedReservations: SeedReservation[] = [];
   public logs: string[] = [];
 
   public nextBuildingId = 1;

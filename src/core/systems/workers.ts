@@ -26,6 +26,26 @@ function getNurseryWaterDeliveryTarget(simulation: SimulationContext, worker: Nu
   return target?.type === 'nursery' || target?.type === 'cistern' ? target : null;
 }
 
+function getSeedDeliverySource(simulation: SimulationContext, task: RobotTask | null | undefined): BuildingInstance | null {
+  if (!task || task.type !== 'deliver_seeds' || task.sourceBuildingId === undefined) return null;
+  return simulation.buildings.find((building) => building.id === task.sourceBuildingId && building.type === 'nursery') ?? null;
+}
+
+function getSeedDeliveryDestination(simulation: SimulationContext, task: RobotTask | null | undefined): BuildingInstance | null {
+  if (!task || task.type !== 'deliver_seeds' || task.destinationBuildingId === undefined) return null;
+  return simulation.getRobotHouseBuilding(task.destinationBuildingId);
+}
+
+function workerSeedCargo(worker: NurseryWorker): number {
+  return Object.values(worker.seedLoad).reduce((total, value) => total + (value ?? 0), 0);
+}
+
+function carriedSeedLabel(worker: NurseryWorker): string {
+  const seed = SEEDS[worker.targetSeed ?? 'pioneer'];
+  const quantity = worker.targetSeed ? worker.seedLoad[worker.targetSeed] ?? 0 : workerSeedCargo(worker);
+  return `${quantity} graine${quantity > 1 ? 's' : ''}${worker.targetSeed ? ` de ${seed.name}` : ''}`;
+}
+
 function clearWorkerTargets(worker: NurseryWorker): void {
   worker.targetIndex = null;
   worker.targetSeed = null;
@@ -39,7 +59,22 @@ function assignTask(simulation: SimulationContext, worker: NurseryWorker, task: 
   worker.currentTaskId = reserved.id;
   clearWorkerTargets(worker);
   worker.waterLoad = 0;
+  if (workerSeedCargo(worker) > 0) simulation.returnSeedCargoToNursery(worker, 'Cargaison précédente sécurisée');
   worker.progress = 0;
+  if (reserved.type === 'deliver_seeds') {
+    const source = getSeedDeliverySource(simulation, reserved);
+    const destination = getSeedDeliveryDestination(simulation, reserved);
+    if (!source || !destination) {
+      simulation.blockTask(reserved.id, 'Livraison de graines incomplète');
+      worker.currentTaskId = null;
+      return false;
+    }
+    worker.state = 'to-seed-load';
+    worker.targetBuildingId = source.id;
+    worker.targetSeed = reserved.seed ?? null;
+    worker.message = `Va charger des graines pour la maison #${destination.id}`;
+    return true;
+  }
   if (reserved.type === 'water-delivery' && reserved.target.kind === 'building') {
     const targetInfo = reserved.target;
     const target = simulation.buildings.find((building) => building.id === targetInfo.buildingId);
@@ -81,6 +116,7 @@ function assignTask(simulation: SimulationContext, worker: NurseryWorker, task: 
 export function updateNurseryWorker(this: SimulationContext, dt: number): void {
   const nursery = this.getNurseryBuilding();
   if (!nursery) {
+    if (this.nurseryWorker) this.returnSeedCargoToNursery(this.nurseryWorker, 'Pépinière absente');
     this.nurseryWorker = null;
     return;
   }
@@ -105,6 +141,144 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
       return;
     }
     this.notify();
+    return;
+  }
+
+  if (worker.state === 'to-seed-load') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'deliver_seeds' || task.state === 'cancelled' || task.state === 'blocked') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = task?.blockedReason ?? 'Livraison de graines modifiée';
+      this.notify();
+      return;
+    }
+    const source = getSeedDeliverySource(this, task);
+    if (!source) {
+      this.cancelTask(task.id, 'Pépinière source introuvable');
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = 'Pépinière source introuvable';
+      this.notify();
+      return;
+    }
+    if (this.moveWorkerToward(worker, source.gx + 0.5, source.gy + 0.5, dt)) {
+      if (!this.startTask(task.id, worker.id)) {
+        this.setNurseryWorkerBlocked(worker, this.getRobotTask(task.id)?.blockedReason ?? 'Livraison impossible');
+        return;
+      }
+      worker.state = 'loading-seeds';
+      worker.progress = 0;
+      worker.message = 'Charge les graines réservées';
+      this.notify();
+    }
+    return;
+  }
+
+  if (worker.state === 'loading-seeds') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'deliver_seeds' || task.state !== 'in-progress') {
+      worker.state = 'returning';
+      worker.progress = 0;
+      worker.message = 'Livraison de graines modifiée';
+      this.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
+    if (worker.progress < 1) return;
+    const loaded = this.loadSeedsForDelivery(worker, task);
+    if (!loaded.ok) {
+      this.setNurseryWorkerBlocked(worker, loaded.message);
+      return;
+    }
+    const destination = getSeedDeliveryDestination(this, task);
+    if (!destination) {
+      worker.state = 'returning-seeds';
+      worker.progress = 0;
+      worker.message = 'Destination invalide, retour des graines';
+      this.notify();
+      return;
+    }
+    worker.state = 'to-seed-delivery';
+    worker.targetBuildingId = destination.id;
+    worker.progress = 0;
+    worker.message = `Livre ${carriedSeedLabel(worker)}`;
+    this.notify();
+    return;
+  }
+
+  if (worker.state === 'to-seed-delivery') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'deliver_seeds' || task.state === 'cancelled' || task.state === 'blocked') {
+      worker.state = workerSeedCargo(worker) > 0 ? 'returning-seeds' : 'returning';
+      worker.progress = 0;
+      worker.message = task?.blockedReason ?? 'Livraison annulée, retour';
+      this.notify();
+      return;
+    }
+    const destination = getSeedDeliveryDestination(this, task);
+    const blockedReason = this.getSeedDeliveryTaskBlockedReason(task);
+    if (!destination || blockedReason) {
+      if (blockedReason) this.cancelTask(task.id, blockedReason);
+      worker.state = workerSeedCargo(worker) > 0 ? 'returning-seeds' : 'returning';
+      worker.progress = 0;
+      worker.message = blockedReason ?? 'Destination invalide, retour des graines';
+      this.notify();
+      return;
+    }
+    if (this.moveWorkerToward(worker, destination.gx + 0.5, destination.gy + 0.5, dt)) {
+      worker.state = 'unloading-seeds';
+      worker.progress = 0;
+      worker.message = 'Dépose les graines dans la maison';
+      this.notify();
+    }
+    return;
+  }
+
+  if (worker.state === 'unloading-seeds') {
+    const task = this.getRobotTask(worker.currentTaskId);
+    if (!task || task.type !== 'deliver_seeds') {
+      worker.state = workerSeedCargo(worker) > 0 ? 'returning-seeds' : 'returning';
+      worker.progress = 0;
+      worker.message = 'Livraison de graines modifiée';
+      this.notify();
+      return;
+    }
+    worker.progress = Math.min(1, worker.progress + dt / WORKER_TRANSFER_DURATION);
+    if (worker.progress < 1) return;
+    const delivered = this.deliverSeedsToRobotHouse(worker, task);
+    if (!delivered.ok) {
+      worker.state = workerSeedCargo(worker) > 0 ? 'returning-seeds' : 'returning';
+      worker.progress = 0;
+      worker.message = delivered.message;
+      this.notify();
+      return;
+    }
+    this.completeTask(task.id);
+    worker.currentTaskId = null;
+    worker.targetBuildingId = null;
+    worker.targetSeed = null;
+    worker.state = 'returning';
+    worker.progress = 0;
+    worker.message = 'Retour à la pépinière après livraison';
+    this.updateRestorationParcels(0);
+    this.syncRobotTasks();
+    this.notify();
+    return;
+  }
+
+  if (worker.state === 'returning-seeds') {
+    if (this.moveWorkerToward(worker, home.x, home.y, dt)) {
+      const reason = worker.message || 'Livraison annulée';
+      this.returnSeedCargoToNursery(worker, reason);
+      if (worker.currentTaskId) this.cancelTask(worker.currentTaskId, reason);
+      worker.state = 'idle';
+      worker.currentTaskId = null;
+      clearWorkerTargets(worker);
+      worker.progress = 0;
+      worker.message = 'Graines rapportées à la pépinière';
+      this.notify();
+    }
     return;
   }
 
@@ -416,12 +590,14 @@ export function updateNurseryWorker(this: SimulationContext, dt: number): void {
 
   if (worker.state === 'returning') {
     if (this.moveWorkerToward(worker, home.x, home.y, dt)) {
+      if (workerSeedCargo(worker) > 0) this.returnSeedCargoToNursery(worker, 'Retour à la pépinière');
       worker.state = 'idle';
       worker.currentTaskId = null;
       worker.targetIndex = null;
       worker.targetSeed = null;
       worker.targetScanZoneId = null;
       worker.targetBuildingId = null;
+      worker.seedLoad = {};
       worker.progress = 0;
       worker.message = 'Prêt à repartir';
       this.notify();
@@ -681,6 +857,7 @@ export function ensureNurseryWorker(this: SimulationContext, nursery: BuildingIn
       targetScanZoneId: null,
       targetBuildingId: null,
       waterLoad: 0,
+      seedLoad: {},
       progress: 0,
       message: 'Peignez une zone pour lancer les plantations',
     };
@@ -705,6 +882,7 @@ export function ensureRobotHouseWorker(this: SimulationContext, house: BuildingI
       targetScanZoneId: null,
       targetBuildingId: null,
       waterLoad: 0,
+      seedLoad: {},
       progress: 0,
       message: 'Définissez une parcelle rectangulaire',
     };
@@ -721,19 +899,23 @@ export function wakeNurseryWorker(this: SimulationContext): void {
 }
 
 export function clearNurseryWorkerTask(this: SimulationContext, worker: NurseryWorker): void {
+  if (workerSeedCargo(worker) > 0) this.returnSeedCargoToNursery(worker, 'Tâche interrompue');
   if (worker.currentTaskId) this.cancelTask(worker.currentTaskId, 'Tâche interrompue');
   worker.currentTaskId = null;
   clearWorkerTargets(worker);
   worker.waterLoad = 0;
+  worker.seedLoad = {};
 }
 
 export function setNurseryWorkerBlocked(this: SimulationContext, worker: NurseryWorker, message: string): void {
   if (worker.state === 'blocked' && worker.message === message) return;
+  if (workerSeedCargo(worker) > 0) this.returnSeedCargoToNursery(worker, message);
   if (worker.currentTaskId) this.blockTask(worker.currentTaskId, message);
   worker.state = 'blocked';
   worker.currentTaskId = null;
   clearWorkerTargets(worker);
   worker.waterLoad = 0;
+  worker.seedLoad = {};
   worker.progress = 0;
   worker.message = message;
   this.notify();

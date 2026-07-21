@@ -14,6 +14,8 @@ import type {
   RobotWorker,
   RobotTask,
   ScanZone,
+  SeedRequest,
+  SeedReservation,
   SeedType,
   SelectedTarget,
   TerrainType,
@@ -40,6 +42,8 @@ export interface GameState {
   nurseryWorker: NurseryWorker | null;
   robotHouseWorkers: RobotWorker[];
   restorationParcels: RestorationParcel[];
+  seedRequests: SeedRequest[];
+  seedReservations: SeedReservation[];
   logs: string[];
   nextBuildingId: number;
   unlockedBuildings: Set<BuildingType>;

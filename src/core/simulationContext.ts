@@ -20,6 +20,8 @@ import type {
   PressureLevel,
   RestorationParcel,
   RestorationParcelBounds,
+  SeedRequest,
+  SeedReservation,
   RobotRole,
   RobotWorker,
   RobotTask,
@@ -77,6 +79,8 @@ export interface SimulationContext {
   nurseryWorker: NurseryWorker | null;
   robotHouseWorkers: RobotWorker[];
   restorationParcels: RestorationParcel[];
+  seedRequests: SeedRequest[];
+  seedReservations: SeedReservation[];
   logs: string[];
   readonly events: GameEvents;
   nextBuildingId: number;
@@ -145,6 +149,8 @@ export interface SimulationContext {
   syncRestorationTasks(desiredIds: Set<string>): void;
   getRestorationTaskBlockedReason(task: RobotTask): string | null;
   chooseRestorationSeedForIndex(parcel: RestorationParcel, index: number): SeedType | null;
+  chooseSeedForRestorationNeed(parcel: RestorationParcel, index: number): SeedType | null;
+  getRestorationSeedDemand(parcel: RestorationParcel): Partial<Record<SeedType, number>>;
   transferSeedToRobotHouse(homeBuildingId: number, seed: SeedType): PlacementResult;
   transferWaterToRobotHouse(homeBuildingId: number): PlacementResult;
   prepareSoilAt(homeBuildingId: number, index: number): PlacementResult;
@@ -204,6 +210,23 @@ export interface SimulationContext {
   wakeNurseryWorker(): void;
   setNurseryWorkerBlocked(worker: NurseryWorker, message: string): void;
   clearNurseryWorkerTask(worker: NurseryWorker): void;
+  updateSeedRequests(): void;
+  syncSeedDeliveryTasks(desiredIds: Set<string>): void;
+  getActiveSeedRequestsForHouse(homeBuildingId: number): SeedRequest[];
+  getSeedRequestsForNursery(nurseryId?: number): SeedRequest[];
+  getReservedSeedCount(seed: SeedType, nurseryId?: number): number;
+  getFreeNurserySeedCount(seed: SeedType, nurseryId?: number): number;
+  getIncomingSeedCount(homeBuildingId: number, parcelId: string, seed: SeedType): number;
+  getSeedRequestOutstanding(request: SeedRequest): number;
+  getSeedDeliveryTaskBlockedReason(task: RobotTask): string | null;
+  loadSeedsForDelivery(worker: NurseryWorker, task: RobotTask): PlacementResult;
+  deliverSeedsToRobotHouse(worker: NurseryWorker, task: RobotTask): PlacementResult;
+  returnSeedCargoToNursery(worker: NurseryWorker, reason?: string): void;
+  handleSeedDeliveryTaskCancellation(task: RobotTask, reason: string): void;
+  cancelSeedRequest(requestId: string, reason?: string): SeedRequest | null;
+  cancelSeedRequestsForHouse(homeBuildingId: number, reason?: string): void;
+  cancelSeedRequestsForNursery(nurseryId: number, reason?: string): void;
+  releaseSeedReservations(requestId: string, maxQuantity?: number): number;
   findNextWorkerTarget(worker: NurseryWorker): WorkerTarget | null;
   findNextScanTarget(worker: NurseryWorker): ScanTarget | null;
   isScanTargetQueued(zoneId: number): boolean;
@@ -225,6 +248,10 @@ export interface SimulationContext {
     zoneId?: number;
     parcelId?: string;
     homeBuildingId?: number;
+    seedRequestId?: string;
+    sourceBuildingId?: number;
+    destinationBuildingId?: number;
+    seedQuantities?: Partial<Record<SeedType, number>>;
     seed?: SeedType;
     priority: number;
     requiredResources?: RobotTaskResources;

@@ -1,5 +1,5 @@
 import { BUILDING_ORDER } from '../config';
-import { SCAN_ZONE_RADIUS } from '../gameConfig';
+import { CELL_HUMUS_ADJUST_RATE, CELL_SHADE_ADJUST_RATE, CELL_WATER_DRY_RATE, CELL_WATER_RISE_RATE, SCAN_ZONE_RADIUS } from '../gameConfig';
 import { createBuildingCooldowns, createBuildingTotals, createInitialCells, createSeedInventory } from '../state';
 import { GRID_HEIGHT, GRID_WIDTH, TerrainType } from '../types';
 import type { BuildingType, PlacementResult, PlacementTool, SeedType } from '../types';
@@ -24,6 +24,8 @@ export function reset(this: SimulationContext): void {
   this.nurseryWorker = null;
   this.robotHouseWorkers = [];
   this.restorationParcels = [];
+  this.seedRequests = [];
+  this.seedReservations = [];
   this.nextBuildingId = 1;
   this.nextPlantingZoneId = 1;
   this.nextScanZoneId = 1;
@@ -128,9 +130,11 @@ export function update(this: SimulationContext, deltaSeconds: number): void {
     let targetHumus = fields.naturalHumus[i];
     if (cell.terrain === TerrainType.Dune) targetWater *= 0.68;
     if (cell.terrain === TerrainType.Salt) targetHumus *= 0.72;
-    cell.water += (clamp(targetWater) - cell.water) * Math.min(1, 0.2 * dt);
-    cell.shade += (clamp(targetShade) - cell.shade) * Math.min(1, 0.18 * dt);
-    cell.humus += (clamp(targetHumus) - cell.humus) * Math.min(1, 0.14 * dt);
+    const waterTarget = clamp(targetWater);
+    const waterRate = waterTarget >= cell.water ? CELL_WATER_RISE_RATE : CELL_WATER_DRY_RATE;
+    cell.water += (waterTarget - cell.water) * Math.min(1, waterRate * dt);
+    cell.shade += (clamp(targetShade) - cell.shade) * Math.min(1, CELL_SHADE_ADJUST_RATE * dt);
+    cell.humus += (clamp(targetHumus) - cell.humus) * Math.min(1, CELL_HUMUS_ADJUST_RATE * dt);
     this.updateGroundCover(cell, fields.growthBoost[i], dt);
     this.updateTree(i, fields.growthBoost[i], dt);
   }

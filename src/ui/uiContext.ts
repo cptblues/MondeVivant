@@ -58,6 +58,7 @@ export interface UIContext {
   renderNursery(): void;
   renderRobotHouse(): void;
   buildWorkerPanel(): string;
+  buildNurserySeedSupplySummary(): string;
   buildNurseryWaterSummary(): string;
   buildSeedSearchAction(): string;
   bindSeedSearchButton(root: HTMLElement): void;

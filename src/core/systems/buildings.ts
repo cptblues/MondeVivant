@@ -61,6 +61,7 @@ export function placeBuilding(this: SimulationContext, type: BuildingType, gx: n
         homeBuildingId: building.id,
         bounds: null,
         state: 'unassigned',
+        seedSupplyState: 'none',
         totalTiles: 0,
         analyzedTiles: 0,
         preparedTiles: 0,
@@ -70,6 +71,7 @@ export function placeBuilding(this: SimulationContext, type: BuildingType, gx: n
         speciesPresent: 0,
         healthyPlantRatio: 0,
         developedTrees: 0,
+        seedNeeds: {},
         needs: ['Définir une parcelle rectangulaire.'],
         blockers: [],
         progress: { analysis: 0, preparation: 0, planting: 0, maintenance: 0, biodiversity: 0, autonomy: 0 },
@@ -139,11 +141,14 @@ export function removeSelectedBuilding(this: SimulationContext): boolean {
     }
   }
   if (building.type === 'nursery') {
+    this.cancelSeedRequestsForNursery(building.id, 'Pépinière retirée');
+    if (this.nurseryWorker) this.returnSeedCargoToNursery(this.nurseryWorker, 'Pépinière retirée');
     this.nurseryWorker = null;
     if (this.selectedTool?.kind === 'planting-zone') this.selectedTool = null;
     this.addLog('Les zones de plantation restent dessinées mais attendront une nouvelle pépinière.');
   }
   if (building.type === 'robot-house') {
+    this.cancelSeedRequestsForHouse(building.id, 'Maison de robot retirée');
     this.robotHouseWorkers = this.robotHouseWorkers.filter((worker) => worker.homeBuildingId !== building.id);
     this.restorationParcels = this.restorationParcels.filter((parcel) => parcel.homeBuildingId !== building.id);
     for (const task of this.tasks.filter((candidate) => candidate.homeBuildingId === building.id)) this.cancelTask(task.id, 'Maison de robot retirée');
